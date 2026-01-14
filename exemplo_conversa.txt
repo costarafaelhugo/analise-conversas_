@@ -1,0 +1,29 @@
+Cliente: Olá, preciso de ajuda com meu pedido
+Bot: Olá! Como posso ajudá-lo hoje?
+Cliente: Meu pedido está atrasado
+Bot: Desculpe pelo inconveniente. Pode me informar o número do pedido?
+Cliente: 12345
+Bot: Verificando... Seu pedido foi enviado ontem e deve chegar hoje.
+Cliente: Mas está dizendo que ainda não foi enviado no site
+Bot: Pode me passar o número do pedido novamente?
+Cliente: Já passei, é 12345
+Bot: Verificando... Seu pedido foi enviado ontem e deve chegar hoje.
+Cliente: Você não está me ajudando, quero falar com um humano
+Bot: Claro, vou transferir você para nossa equipe de atendimento.
+---
+Cliente: Preciso trocar um produto
+Bot: Olá! Como posso ajudá-lo hoje?
+Cliente: Quero trocar uma camiseta
+Bot: Para realizar a troca, acesse nosso formulário: www.exemplo.com/troca
+Cliente: Ok, obrigado
+Bot: Disponha! Espero ter ajudado.
+---
+Cliente: Qual o status do pedido 67890?
+Bot: Olá! Como posso ajudá-lo hoje?
+Cliente: Status do pedido 67890
+Bot: Verificando o pedido 67890... Seu pedido está em trânsito e deve chegar em 2 dias.
+Cliente: Obrigado!
+Bot: Disponha! Se precisar de mais algo, estou aqui.
+
+
+
