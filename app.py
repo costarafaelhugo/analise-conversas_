@@ -21,57 +21,42 @@ st.markdown("---")
 # Sidebar - Configurações
 st.sidebar.header("⚙️ Configurações")
 
-# Seleção do método de análise
-metodo_analise = st.sidebar.radio(
-    "Método de Análise",
-    options=["Local (Regras de Negócio)", "OpenAI API"],
-    index=0,
-    help="Escolha como deseja analisar as conversas: Local (rápido, sem API) ou OpenAI (IA avançada)"
+# Configurações para OpenAI API (obrigatório)
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔑 Configurações OpenAI")
+
+# Importar openai
+try:
+    import openai
+except ImportError:
+    st.sidebar.error("❌ Biblioteca openai não instalada. Execute: pip install openai")
+    st.stop()
+
+api_key = st.sidebar.text_input(
+    "OpenAI API Key",
+    value="",
+    type="password",
+    help="Insira sua chave da API do OpenAI"
 )
 
-# Configurações para OpenAI API
-api_key = None
-model_name = None
-delay_entre_requisicoes = 1  # Valor padrão
+model_name = st.sidebar.selectbox(
+    "Modelo OpenAI",
+    options=["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+    index=0,
+    help="Selecione o modelo do OpenAI (gpt-4o-mini é mais rápido e econômico)"
+)
 
-if metodo_analise == "OpenAI API":
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🔑 Configurações OpenAI")
-    
-    # Importar openai apenas se necessário
-    try:
-        import openai
-    except ImportError:
-        st.sidebar.error("❌ Biblioteca openai não instalada. Execute: pip install openai")
-        st.stop()
-    
-    api_key = st.sidebar.text_input(
-        "OpenAI API Key",
-        value="",
-        type="password",
-        help="Insira sua chave da API do OpenAI"
-    )
-    
-    model_name = st.sidebar.selectbox(
-        "Modelo OpenAI",
-        options=["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
-        index=0,
-        help="Selecione o modelo do OpenAI (gpt-4o-mini é mais rápido e econômico)"
-    )
-    
-    # Configuração de delay entre requisições
-    delay_entre_requisicoes = st.sidebar.slider(
-        "Delay entre requisições (segundos)",
-        min_value=1,
-        max_value=30,
-        value=5,
-        step=1,
-        help="Aumente este valor se estiver recebendo erros de rate limit. Recomendado: 5-10 segundos para contas gratuitas, 3-5 para contas pagas."
-    )
-    
-    st.sidebar.info("💡 **Dica**: Se receber erros de rate limit, aumente o delay ou use análise Local.")
-else:
-    st.sidebar.info("💡 **Análise Local**: Usa regras de negócio pré-definidas. Rápida e sem necessidade de API.")
+# Configuração de delay entre requisições
+delay_entre_requisicoes = st.sidebar.slider(
+    "Delay entre requisições (segundos)",
+    min_value=1,
+    max_value=30,
+    value=5,
+    step=1,
+    help="Aumente este valor se estiver recebendo erros de rate limit. Recomendado: 5-10 segundos para contas gratuitas, 3-5 para contas pagas."
+)
+
+st.sidebar.info("💡 **Dica**: Se receber erros de rate limit, aumente o delay entre requisições.")
 
 # Configuração geral - Limite de conversas
 st.sidebar.markdown("---")
@@ -136,49 +121,53 @@ def extract_json_from_text(text: str) -> Dict:
     
     return None
 
-# Função para criar prompt do sistema (para Gemini)
+# Função para criar prompt do sistema
 def criar_prompt_sistema(conversa: str) -> str:
-    """Cria o prompt estruturado para análise da conversa via Gemini"""
-    prompt = f"""Você é um analista especializado em qualidade de atendimento de chatbots. 
+    """Cria o prompt estruturado para análise da conversa via OpenAI"""
+    prompt = f"""# Role
 
-Analise a seguinte conversa entre um Cliente e um Bot e retorne APENAS um objeto JSON válido com os seguintes campos (sem formatação markdown, apenas JSON puro):
+Você é um Auditor de Qualidade de Atendimento Automatizado (QA). Sua função é analisar conversas entre clientes e o agente de IA "WHIZZ PÓS-VENDAS".
+
+# Objetivo
+
+Determinar se uma **INTERVENÇÃO HUMANA** é necessária baseada estritamente no desempenho técnico e procedimental do agente.
+
+# Contexto do Agente
+
+O agente "WHIZZ PÓS-VENDAS" é responsável por:
+
+- Tirar dúvidas sobre status do pedido.
+- Processar trocas e devoluções.
+- Emitir ou consultar vale-trocas.
+
+# Critérios de Análise (A Lógica de Decisão)
+
+Você deve marcar `acao_necessaria: true` **APENAS** se ocorrerem as seguintes falhas específicas do agente:
+
+1. **Alucinação:** O agente inventou informações, forneceu dados incoerentes com o contexto ou prometeu algo impossível.
+
+2. **Falha no Transbordo:** O agente identificou uma situação complexa que exigia humano, mas não realizou o transbordo/transferência.
+
+3. **Omissão de SAC:** O cliente solicitou explicitamente o link do SAC ou contato com suporte, e o agente falhou em fornecer o link ou o contato.
+
+# O Que IGNORAR (Não requer ação sobre o agente)
+
+Você deve marcar `acao_necessaria: false` se o problema for externo ao comportamento do bot, mesmo que o cliente esteja insatisfeito. **NÃO sinalize** ação para:
+
+- Atrasos na entrega (Culpa da transportadora/logística).
+- Entregas não recebidas/extraviadas.
+- Problemas logísticos gerais.
+- Insatisfação do cliente com prazos ou políticas da empresa (desde que o agente tenha informado corretamente).
+
+# Formato de Resposta
+
+Analise a seguinte conversa e retorne APENAS um objeto JSON válido com os seguintes campos (sem formatação markdown, apenas JSON puro):
 
 {{
-    "necessidade_transbordo": "Sim" ou "Não",
-    "transferencia": "Sim" ou "Não",
-    "agente_agiu_corretamente": "Sim" ou "Não",
-    "motivo_transbordo": "string",
-    "problema_mapeado": "string",
-    "precisa_atencao": "Sim" ou "Não",
-    "observacao": "string"
+    "acao_necessaria": true ou false,
+    "tipo_falha": "string" (se acao_necessaria for true: "Alucinação", "Falha no Transbordo", "Omissão de SAC", ou "N/A" se false),
+    "descricao": "string" (descrição detalhada do problema encontrado ou confirmação de que não há problema)
 }}
-
-REGRAS DE ANÁLISE:
-
-1. **necessidade_transbordo** (Sim/Não):
-   - "Sim" se: Cliente pede humano, Bot entra em looping, Cliente nega recebimento (divergência), Bot dá erro, Cliente muito frustrado.
-   - "Não" se: Bot resolveu ou apenas deu informação correta e cliente saiu.
-
-2. **transferencia** (Sim/Não): 
-   - "Sim" apenas se o bot transferiu para fila humana. 
-   - Se mandou link externo (SAC/Formulário), é "Não".
-
-3. **agente_agiu_corretamente** (Sim/Não):
-   - "Não" se: Bot entrou em looping, deu informação falsa, contradisse a si mesmo, ou pediu avaliação (nota 1-5) quando o cliente digitou texto.
-   - "Sim" caso contrário.
-
-4. **motivo_transbordo**: 
-   - Exemplos: "Solicitação do cliente", "Looping eterno", "Divergência de status", "Cliente inseguro", "Erro técnico", "N/A" (se não houver necessidade de transbordo).
-
-5. **problema_mapeado**: 
-   - Exemplos: "Tudo certo", "Pedido atrasado", "Pedido entregue para outro", "Falha em acionar tools", "Dúvida Vale Troca".
-
-6. **precisa_atencao** (Sim/Não): 
-   - Marcar "Sim" para bugs graves (looping), alucinações ou falhas de processo críticas.
-   - "Não" caso contrário.
-
-7. **observacao**: 
-   - Um resumo curto e detalhado da análise (máximo 2 frases), descrevendo os problemas encontrados.
 
 CONVERSA A SER ANALISADA:
 {conversa}
@@ -196,25 +185,17 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             import openai
         except ImportError:
             return {
-                "necessidade_transbordo": "Erro",
-                "transferencia": "Erro",
-                "agente_agiu_corretamente": "Erro",
-                "motivo_transbordo": "Biblioteca não instalada",
-                "problema_mapeado": "Erro de dependência",
-                "precisa_atencao": "Sim",
-                "observacao": "Erro: Biblioteca openai não está instalada. Execute: pip install openai"
+                "acao_necessaria": True,
+                "tipo_falha": "Erro de dependência",
+                "descricao": "Erro: Biblioteca openai não está instalada. Execute: pip install openai"
             }
         
         # Verificar API Key
         if not api_key_openai:
             return {
-                "necessidade_transbordo": "Erro",
-                "transferencia": "Erro",
-                "agente_agiu_corretamente": "Erro",
-                "motivo_transbordo": "API Key não fornecida",
-                "problema_mapeado": "Erro de configuração",
-                "precisa_atencao": "Sim",
-                "observacao": "Erro: OpenAI API Key não foi configurada. Configure na barra lateral."
+                "acao_necessaria": True,
+                "tipo_falha": "Erro de configuração",
+                "descricao": "Erro: OpenAI API Key não foi configurada. Configure na barra lateral."
             }
         
         # Configurar cliente OpenAI
@@ -244,7 +225,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
                 response = client.chat.completions.create(
                     model=modelo,
                     messages=[
-                        {"role": "system", "content": "Você é um analista especializado em qualidade de atendimento de chatbots. Retorne APENAS JSON válido, sem texto adicional."},
+                        {"role": "system", "content": "Você é um Auditor de Qualidade de Atendimento Automatizado (QA). Retorne APENAS JSON válido, sem texto adicional."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
@@ -292,13 +273,9 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
         
         if response is None or not response.choices or not response.choices[0].message.content:
             return {
-                "necessidade_transbordo": "Erro",
-                "transferencia": "Erro",
-                "agente_agiu_corretamente": "Erro",
-                "motivo_transbordo": "Sem resposta do modelo",
-                "problema_mapeado": "Erro na API",
-                "precisa_atencao": "Sim",
-                "observacao": "O modelo não retornou uma resposta válida"
+                "acao_necessaria": True,
+                "tipo_falha": "Erro na API",
+                "descricao": "O modelo não retornou uma resposta válida"
             }
         
         texto_resposta = response.choices[0].message.content.strip()
@@ -306,23 +283,19 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
         
         if resultado_json is None:
             return {
-                "necessidade_transbordo": "Erro",
-                "transferencia": "Erro",
-                "agente_agiu_corretamente": "Erro",
-                "motivo_transbordo": "Erro ao processar resposta",
-                "problema_mapeado": "Erro ao processar resposta",
-                "precisa_atencao": "Sim",
-                "observacao": f"Erro ao extrair JSON. Resposta: {texto_resposta[:150]}"
+                "acao_necessaria": True,
+                "tipo_falha": "Erro ao processar resposta",
+                "descricao": f"Erro ao extrair JSON. Resposta: {texto_resposta[:150]}"
             }
         
         # Validar e padronizar campos
-        resultado_json["necessidade_transbordo"] = str(resultado_json.get("necessidade_transbordo", "Não")).strip()
-        resultado_json["transferencia"] = str(resultado_json.get("transferencia", "Não")).strip()
-        resultado_json["agente_agiu_corretamente"] = str(resultado_json.get("agente_agiu_corretamente", "Sim")).strip()
-        resultado_json["motivo_transbordo"] = str(resultado_json.get("motivo_transbordo", "N/A")).strip()
-        resultado_json["problema_mapeado"] = str(resultado_json.get("problema_mapeado", "Não identificado")).strip()
-        resultado_json["precisa_atencao"] = str(resultado_json.get("precisa_atencao", "Não")).strip()
-        resultado_json["observacao"] = str(resultado_json.get("observacao", "Sem observação")).strip()
+        acao_necessaria = resultado_json.get("acao_necessaria", False)
+        if isinstance(acao_necessaria, str):
+            acao_necessaria = acao_necessaria.lower() in ["true", "sim", "yes", "1"]
+        
+        resultado_json["acao_necessaria"] = bool(acao_necessaria)
+        resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "N/A")).strip()
+        resultado_json["descricao"] = str(resultado_json.get("descricao", "Sem descrição")).strip()
         
         return resultado_json
         
@@ -341,26 +314,18 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
         
         if is_rate_limit:
             return {
-                "necessidade_transbordo": "Erro",
-                "transferencia": "Erro",
-                "agente_agiu_corretamente": "Erro",
-                "motivo_transbordo": "Rate limit excedido",
-                "problema_mapeado": "Limite de requisições atingido",
-                "precisa_atencao": "Sim",
-                "observacao": "⚠️ Rate limit da API OpenAI excedido. Soluções: 1) Aumente o delay entre requisições na sidebar (recomendado: 10-15s), 2) Adicione créditos na sua conta OpenAI, 3) Use análise Local ao invés de OpenAI API, 4) Aguarde alguns minutos e tente novamente."
+                "acao_necessaria": True,
+                "tipo_falha": "Rate limit excedido",
+                "descricao": "⚠️ Rate limit da API OpenAI excedido. Soluções: 1) Aumente o delay entre requisições na sidebar (recomendado: 10-15s), 2) Adicione créditos na sua conta OpenAI, 3) Aguarde alguns minutos e tente novamente."
             }
         
         if len(error_msg) > 200:
             error_msg = error_msg[:200] + "..."
         
         return {
-            "necessidade_transbordo": "Erro",
-            "transferencia": "Erro",
-            "agente_agiu_corretamente": "Erro",
-            "motivo_transbordo": f"Erro: {error_msg}",
-            "problema_mapeado": f"Erro: {error_msg}",
-            "precisa_atencao": "Sim",
-            "observacao": f"Erro na análise: {error_msg}"
+            "acao_necessaria": True,
+            "tipo_falha": "Erro na análise",
+            "descricao": f"Erro na análise: {error_msg}"
         }
 
 # Função para analisar uma conversa localmente usando regras de negócio
@@ -846,53 +811,41 @@ if uploaded_file is not None:
             if len(conversas_carregadas) > 3:
                 st.info(f"*E mais {len(conversas_carregadas) - 3} conversa(s)...*")
 
-# Função wrapper que escolhe o método de análise
-def analisar_conversa(conversa: str, metodo: str, modelo: str = None, api_key_openai: str = None) -> Dict:
-    """Wrapper que escolhe o método de análise baseado na seleção do usuário"""
-    if metodo == "Local (Regras de Negócio)":
-        return analisar_conversa_local(conversa)
-    elif metodo == "OpenAI API":
-        if modelo is None:
-            return {
-                "necessidade_transbordo": "Erro",
-                "transferencia": "Erro",
-                "agente_agiu_corretamente": "Erro",
-                "motivo_transbordo": "Modelo não especificado",
-                "problema_mapeado": "Erro de configuração",
-                "precisa_atencao": "Sim",
-                "observacao": "Erro: Modelo OpenAI não foi especificado"
-            }
-        return analisar_conversa_openai(conversa, modelo, api_key_openai)
-    else:
-        return analisar_conversa_local(conversa)  # Fallback para local
+# Função wrapper para análise via OpenAI
+def analisar_conversa(conversa: str, modelo: str, api_key_openai: str) -> Dict:
+    """Analisa uma conversa usando OpenAI API"""
+    if modelo is None:
+        return {
+            "acao_necessaria": True,
+            "tipo_falha": "Erro de configuração",
+            "descricao": "Erro: Modelo OpenAI não foi especificado"
+        }
+    return analisar_conversa_openai(conversa, modelo, api_key_openai)
 
 # Processamento
 st.header("🔄 Processamento")
 
 # Mostrar método selecionado
-if metodo_analise == "OpenAI API":
-    if not api_key:
-        st.warning("⚠️ Por favor, configure a OpenAI API Key na barra lateral antes de iniciar a análise.")
-    else:
-        st.info(f"🔍 **Método selecionado:** {metodo_analise} | **Modelo:** {model_name}")
-        
-        # Aviso sobre rate limits se houver muitas conversas
-        if conversas_carregadas and len(conversas_carregadas) > 50:
-            st.warning(f"⚠️ **Atenção**: Você tem {len(conversas_carregadas)} conversas para analisar. Para evitar rate limits, recomendamos:")
-            st.markdown("""
-            - **Aumentar o delay entre requisições** na sidebar (10-15 segundos para contas gratuitas)
-            - **Verificar créditos** na sua conta OpenAI (platform.openai.com)
-            - **Considerar usar análise Local** para grandes volumes (mais rápido e sem limites)
-            """)
+if not api_key:
+    st.warning("⚠️ Por favor, configure a OpenAI API Key na barra lateral antes de iniciar a análise.")
 else:
-    st.info(f"🔍 **Método selecionado:** {metodo_analise} (Análise rápida usando regras de negócio)")
+    st.info(f"🔍 **Análise via IA (OpenAI)** | **Modelo:** {model_name}")
+    
+    # Aviso sobre rate limits se houver muitas conversas
+    if conversas_carregadas and len(conversas_carregadas) > 50:
+        st.warning(f"⚠️ **Atenção**: Você tem {len(conversas_carregadas)} conversas para analisar. Para evitar rate limits, recomendamos:")
+        st.markdown("""
+        - **Aumentar o delay entre requisições** na sidebar (10-15 segundos para contas gratuitas)
+        - **Verificar créditos** na sua conta OpenAI (platform.openai.com)
+        - **Aguarde alguns minutos** se receber erros de rate limit
+        """)
 
 if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", use_container_width=True):
     if len(conversas_carregadas) == 0:
         st.error("❌ Nenhuma conversa encontrada para analisar!")
     else:
-        # Verificar se API Key está configurada quando necessário
-        if metodo_analise == "OpenAI API" and not api_key:
+        # Verificar se API Key está configurada
+        if not api_key:
             st.error("❌ Por favor, configure a OpenAI API Key na barra lateral!")
             st.stop()
         
@@ -916,16 +869,12 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
         # Iterar sobre as conversas (limitadas)
         total_conversas = len(conversas_para_analisar)
         for idx, conversa in enumerate(conversas_para_analisar, 1):
-            metodo_texto = "OpenAI API" if metodo_analise == "OpenAI API" else "Local"
-            status_text.text(f"📊 Analisando conversa {idx}/{total_conversas} ({metodo_texto})...")
+            status_text.text(f"📊 Analisando conversa {idx}/{total_conversas} (OpenAI API)...")
             
-            # Analisar conversa usando o método selecionado
-            if metodo_analise == "OpenAI API":
-                resultado = analisar_conversa(conversa, metodo_analise, model_name, api_key)
-                # Delay configurável para evitar rate limiting
-                time.sleep(delay_entre_requisicoes)
-            else:
-                resultado = analisar_conversa(conversa, metodo_analise)
+            # Analisar conversa usando OpenAI API
+            resultado = analisar_conversa(conversa, model_name, api_key)
+            # Delay configurável para evitar rate limiting
+            time.sleep(delay_entre_requisicoes)
             
             resultado["conversa_numero"] = idx
             resultado["conversa"] = conversa[:200] + "..." if len(conversa) > 200 else conversa
@@ -943,13 +892,9 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
         # Reordenar colunas
         colunas_ordenadas = [
             "conversa_numero",
-            "necessidade_transbordo",
-            "transferencia",
-            "agente_agiu_corretamente",
-            "motivo_transbordo",
-            "problema_mapeado",
-            "precisa_atencao",
-            "observacao",
+            "acao_necessaria",
+            "tipo_falha",
+            "descricao",
             "conversa"
         ]
         
@@ -969,22 +914,30 @@ if 'resultados_processados' in st.session_state and st.session_state['resultados
     df_resultados = st.session_state['df_resultados']
     
     # Estatísticas rápidas
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.metric("Total de Conversas", len(df_resultados))
     
     with col2:
-        precisam_atencao = len(df_resultados[df_resultados["precisa_atencao"] == "Sim"])
-        st.metric("Precisam Atenção", precisam_atencao, delta=None)
+        # Converter acao_necessaria para boolean se necessário
+        if "acao_necessaria" in df_resultados.columns:
+            acoes_necessarias = df_resultados["acao_necessaria"].apply(
+                lambda x: x if isinstance(x, bool) else str(x).lower() in ["true", "sim", "yes", "1"]
+            ).sum()
+        else:
+            acoes_necessarias = 0
+        st.metric("Ações Necessárias", acoes_necessarias, delta=None)
     
     with col3:
-        transbordos = len(df_resultados[df_resultados["necessidade_transbordo"] == "Sim"])
-        st.metric("Transbordos", transbordos)
-    
-    with col4:
-        agentes_corretos = len(df_resultados[df_resultados["agente_agiu_corretamente"] == "Sim"])
-        st.metric("Agente Correto", agentes_corretos, delta=f"{agentes_corretos/len(df_resultados)*100:.1f}%")
+        if "acao_necessaria" in df_resultados.columns:
+            acoes_necessarias = df_resultados["acao_necessaria"].apply(
+                lambda x: x if isinstance(x, bool) else str(x).lower() in ["true", "sim", "yes", "1"]
+            ).sum()
+            sem_acao = len(df_resultados) - acoes_necessarias
+            st.metric("Sem Ação Necessária", sem_acao, delta=f"{sem_acao/len(df_resultados)*100:.1f}%")
+        else:
+            st.metric("Sem Ação Necessária", 0)
     
     # Dataframe com destaque
     st.subheader("Tabela de Resultados")
@@ -1000,23 +953,28 @@ if 'resultados_processados' in st.session_state and st.session_state['resultados
         hide_index=True
     )
     
-    # Filtro para destacar conversas que precisam atenção
-    st.info("💡 **Dica:** Use o filtro abaixo para visualizar apenas as conversas que precisam de atenção especial.")
+    # Filtro para destacar conversas que precisam ação
+    st.info("💡 **Dica:** Use o filtro abaixo para visualizar apenas as conversas que requerem ação/intervenção.")
     
-    filtro_atencao = st.checkbox("Mostrar apenas conversas que precisam atenção", value=False)
+    filtro_acao = st.checkbox("Mostrar apenas conversas que requerem ação", value=False)
     
-    if filtro_atencao:
-        df_filtrado = df_display[df_display['precisa_atencao'] == 'Sim']
-        if not df_filtrado.empty:
-            st.dataframe(
-                df_filtrado,
-                use_container_width=True,
-                height=300,
-                hide_index=True
-            )
-            st.warning(f"⚠️ {len(df_filtrado)} conversa(s) precisa(m) de atenção!")
+    if filtro_acao:
+        if "acao_necessaria" in df_display.columns:
+            df_filtrado = df_display[df_display['acao_necessaria'].apply(
+                lambda x: x if isinstance(x, bool) else str(x).lower() in ["true", "sim", "yes", "1"]
+            )]
+            if not df_filtrado.empty:
+                st.dataframe(
+                    df_filtrado,
+                    use_container_width=True,
+                    height=300,
+                    hide_index=True
+                )
+                st.warning(f"⚠️ {len(df_filtrado)} conversa(s) requer(em) ação/intervenção!")
+            else:
+                st.success("✅ Nenhuma conversa requer ação especial!")
         else:
-            st.success("✅ Nenhuma conversa precisa de atenção especial!")
+            st.warning("⚠️ Campo 'acao_necessaria' não encontrado nos resultados.")
     
     # Botões de download
     st.subheader("💾 Download do Relatório")
@@ -1054,7 +1012,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: gray;'>
-        <p>Analista de Conversas - QA Chatbot | Powered by Google Gemini</p>
+        <p>Analista de Conversas - QA Chatbot | Powered by OpenAI</p>
     </div>
     """,
     unsafe_allow_html=True
