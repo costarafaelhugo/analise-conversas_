@@ -3,6 +3,7 @@ import pandas as pd
 import re
 import json
 import time
+import csv
 from io import StringIO, BytesIO
 from typing import List, Dict
 from datetime import datetime
@@ -166,8 +167,22 @@ Analise a seguinte conversa e retorne APENAS um objeto JSON válido com os segui
 {{
     "acao_necessaria": true ou false,
     "tipo_falha": "string" (se acao_necessaria for true: "Alucinação", "Falha no Transbordo", "Omissão de SAC", ou "N/A" se false),
-    "descricao": "string" (descrição detalhada do problema encontrado ou confirmação de que não há problema)
+    "descricao": "string" (descrição detalhada do problema encontrado ou confirmação de que não há problema),
+    "sugestao_solucao": "string" (se acao_necessaria for true, forneça uma sugestão prática e específica de como corrigir ou melhorar o comportamento do agente para evitar o problema no futuro. Se acao_necessaria for false, use "N/A")
 }}
+
+# Instruções para Sugestão de Solução
+
+Quando `acao_necessaria` for `true`, a `sugestao_solucao` deve:
+- Ser específica e acionável
+- Focar em melhorias no comportamento do agente
+- Sugerir ajustes no fluxo, treinamento ou configuração do bot
+- Ser prática e implementável
+- Exemplos:
+  - "Adicionar validação de dados antes de informar status do pedido"
+  - "Implementar detecção automática de casos complexos e transbordo imediato"
+  - "Incluir link do SAC na resposta quando cliente solicitar contato humano"
+  - "Melhorar treinamento sobre políticas de troca para evitar informações incorretas"
 
 CONVERSA A SER ANALISADA:
 {conversa}
@@ -187,7 +202,8 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Erro de dependência",
-                "descricao": "Erro: Biblioteca openai não está instalada. Execute: pip install openai"
+                "descricao": "Erro: Biblioteca openai não está instalada. Execute: pip install openai",
+                "sugestao_solucao": "Instalar biblioteca: pip install openai"
             }
         
         # Verificar API Key
@@ -195,7 +211,8 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Erro de configuração",
-                "descricao": "Erro: OpenAI API Key não foi configurada. Configure na barra lateral."
+                "descricao": "Erro: OpenAI API Key não foi configurada. Configure na barra lateral.",
+                "sugestao_solucao": "Configurar OpenAI API Key na barra lateral da aplicação"
             }
         
         # Configurar cliente OpenAI
@@ -204,13 +221,10 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
         # Verificar se a conversa não está vazia
         if not conversa or len(conversa.strip()) < 10:
             return {
-                "necessidade_transbordo": "Não",
-                "transferencia": "Não",
-                "agente_agiu_corretamente": "Sim",
-                "motivo_transbordo": "N/A",
-                "problema_mapeado": "Conversa muito curta",
-                "precisa_atencao": "Não",
-                "observacao": "Conversa sem conteúdo suficiente para análise"
+                "acao_necessaria": False,
+                "tipo_falha": "N/A",
+                "descricao": "Conversa sem conteúdo suficiente para análise",
+                "sugestao_solucao": "N/A"
             }
         
         # Criar prompt
@@ -275,7 +289,8 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Erro na API",
-                "descricao": "O modelo não retornou uma resposta válida"
+                "descricao": "O modelo não retornou uma resposta válida",
+                "sugestao_solucao": "Verificar conexão com API OpenAI e tentar novamente"
             }
         
         texto_resposta = response.choices[0].message.content.strip()
@@ -285,7 +300,8 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Erro ao processar resposta",
-                "descricao": f"Erro ao extrair JSON. Resposta: {texto_resposta[:150]}"
+                "descricao": f"Erro ao extrair JSON. Resposta: {texto_resposta[:150]}",
+                "sugestao_solucao": "Verificar formato da resposta da API e ajustar prompt se necessário"
             }
         
         # Validar e padronizar campos
@@ -296,6 +312,25 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
         resultado_json["acao_necessaria"] = bool(acao_necessaria)
         resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "N/A")).strip()
         resultado_json["descricao"] = str(resultado_json.get("descricao", "Sem descrição")).strip()
+        
+        # Processar sugestão de solução
+        sugestao = resultado_json.get("sugestao_solucao", "")
+        if not sugestao or sugestao.strip() == "":
+            # Se não foi fornecida e há ação necessária, criar uma sugestão genérica
+            if resultado_json["acao_necessaria"]:
+                tipo = resultado_json["tipo_falha"]
+                if "Alucinação" in tipo:
+                    sugestao = "Revisar base de conhecimento e adicionar validação de dados antes de informar ao cliente"
+                elif "Transbordo" in tipo:
+                    sugestao = "Implementar detecção automática de casos complexos e fluxo de transbordo imediato"
+                elif "SAC" in tipo:
+                    sugestao = "Incluir link do SAC e opção de contato humano quando cliente solicitar"
+                else:
+                    sugestao = "Revisar fluxo conversacional e melhorar detecção de intents do cliente"
+            else:
+                sugestao = "N/A"
+        
+        resultado_json["sugestao_solucao"] = str(sugestao).strip()
         
         return resultado_json
         
@@ -316,7 +351,8 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Rate limit excedido",
-                "descricao": "⚠️ Rate limit da API OpenAI excedido. Soluções: 1) Aumente o delay entre requisições na sidebar (recomendado: 10-15s), 2) Adicione créditos na sua conta OpenAI, 3) Aguarde alguns minutos e tente novamente."
+                "descricao": "⚠️ Rate limit da API OpenAI excedido. Soluções: 1) Aumente o delay entre requisições na sidebar (recomendado: 10-15s), 2) Adicione créditos na sua conta OpenAI, 3) Aguarde alguns minutos e tente novamente.",
+                "sugestao_solucao": "Aumentar delay entre requisições na sidebar para 10-15 segundos ou adicionar créditos na conta OpenAI"
             }
         
         if len(error_msg) > 200:
@@ -325,7 +361,8 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
         return {
             "acao_necessaria": True,
             "tipo_falha": "Erro na análise",
-            "descricao": f"Erro na análise: {error_msg}"
+            "descricao": f"Erro na análise: {error_msg}",
+            "sugestao_solucao": "Verificar logs de erro e configurações da API OpenAI"
         }
 
 # Função para analisar uma conversa localmente usando regras de negócio
@@ -667,8 +704,8 @@ def processar_txt(conteudo: str) -> List[str]:
     return conversas
 
 # Função para processar arquivo CSV
-def processar_csv(conteudo: str) -> List[str]:
-    """Processa arquivo CSV com coluna 'conversa' ou 'Conversa'"""
+def processar_csv(conteudo: str) -> Dict:
+    """Processa arquivo CSV com coluna 'conversa' ou 'Conversa' e retorna conversas + DataFrame completo"""
     try:
         # Tentar diferentes métodos de leitura do CSV
         df = None
@@ -702,7 +739,7 @@ def processar_csv(conteudo: str) -> List[str]:
         
         if df is None or df.empty:
             st.error("❌ Não foi possível processar o arquivo CSV ou está vazio!")
-            return []
+            return {"conversas": [], "dataframe": None}
         
         # Procurar coluna de conversa (case-insensitive)
         coluna_conversa = None
@@ -717,25 +754,33 @@ def processar_csv(conteudo: str) -> List[str]:
             st.info(f"📋 Colunas disponíveis no arquivo: {', '.join(df.columns.tolist()[:10])}")
             if len(df.columns) > 10:
                 st.info(f"... e mais {len(df.columns) - 10} coluna(s)")
-            return []
+            return {"conversas": [], "dataframe": None}
         
         # Extrair conversas, removendo valores nulos e vazios
         conversas = df[coluna_conversa].dropna().tolist()
         # Converter para string e remover conversas vazias
         conversas_processadas = []
-        for conv in conversas:
+        indices_validos = []
+        for idx, conv in enumerate(conversas):
             conv_str = str(conv).strip()
             if conv_str and conv_str.lower() not in ['nan', 'none', '']:
                 conversas_processadas.append(conv_str)
+                indices_validos.append(idx)
         
-        return conversas_processadas
+        # Filtrar DataFrame para manter apenas linhas com conversas válidas
+        df_filtrado = df.iloc[indices_validos].copy() if indices_validos else df.copy()
+        
+        return {
+            "conversas": conversas_processadas,
+            "dataframe": df_filtrado
+        }
     
     except Exception as e:
         st.error(f"❌ Erro ao processar CSV: {str(e)}")
         import traceback
         with st.expander("🔍 Detalhes do erro (clique para expandir)"):
             st.code(traceback.format_exc())
-        return []
+        return {"conversas": [], "dataframe": None}
 
 # Interface principal
 st.header("📤 Upload de Arquivo")
@@ -776,7 +821,16 @@ if uploaded_file is not None:
             if conteudo is None:
                 conteudo = bytes_data.decode('utf-8', errors='ignore')
             
-            conversas_carregadas = processar_csv(conteudo)
+            resultado_csv = processar_csv(conteudo)
+            conversas_carregadas = resultado_csv.get("conversas", [])
+            df_original = resultado_csv.get("dataframe", None)
+            
+            # Salvar DataFrame original no session state
+            if df_original is not None:
+                st.session_state['df_csv_original'] = df_original
+            else:
+                st.session_state['df_csv_original'] = None
+            
             if conversas_carregadas:
                 st.session_state['conversas_carregadas_count'] = len(conversas_carregadas)
                 st.success(f"✅ {len(conversas_carregadas)} conversa(s) carregada(s) do arquivo CSV")
@@ -790,6 +844,7 @@ if uploaded_file is not None:
             import traceback
             st.error(f"Detalhes: {traceback.format_exc()}")
             conversas_carregadas = []
+            st.session_state['df_csv_original'] = None
     
     # Mostrar prévia das conversas e informações sobre limite
     if conversas_carregadas:
@@ -818,7 +873,8 @@ def analisar_conversa(conversa: str, modelo: str, api_key_openai: str) -> Dict:
         return {
             "acao_necessaria": True,
             "tipo_falha": "Erro de configuração",
-            "descricao": "Erro: Modelo OpenAI não foi especificado"
+            "descricao": "Erro: Modelo OpenAI não foi especificado",
+            "sugestao_solucao": "Selecionar um modelo OpenAI na barra lateral"
         }
     return analisar_conversa_openai(conversa, modelo, api_key_openai)
 
@@ -859,12 +915,34 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
         else:
             st.info(f"📊 Analisando todas as {len(conversas_carregadas)} conversas carregadas.")
         
+        # Salvar conversas para análise no session state para garantir acesso posterior
+        st.session_state['conversas_para_analisar'] = conversas_para_analisar
+        
         # Inicializar lista de resultados
         resultados = []
         
         # Barra de progresso
         progress_bar = st.progress(0)
         status_text = st.empty()
+        
+        # Obter DataFrame original se disponível
+        df_original = st.session_state.get('df_csv_original', None)
+        
+        # Função auxiliar para encontrar coluna por nome (case-insensitive)
+        def encontrar_coluna(df, nomes_possiveis):
+            if df is None:
+                return None
+            for nome in nomes_possiveis:
+                for col in df.columns:
+                    if col.strip().lower() == nome.lower():
+                        return col
+            return None
+        
+        # Identificar colunas relevantes no CSV original
+        col_retailer = encontrar_coluna(df_original, ['retailer', 'cliente', 'customer', 'loja', 'store'])
+        col_data = encontrar_coluna(df_original, ['data', 'date', 'data_hora', 'datetime', 'timestamp'])
+        col_hora = encontrar_coluna(df_original, ['hora', 'time', 'horario'])
+        col_conversa_original = encontrar_coluna(df_original, ['conversa', 'conversation'])
         
         # Iterar sobre as conversas (limitadas)
         total_conversas = len(conversas_para_analisar)
@@ -878,6 +956,36 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
             
             resultado["conversa_numero"] = idx
             resultado["conversa"] = conversa[:200] + "..." if len(conversa) > 200 else conversa
+            resultado["conversa_completa"] = conversa  # Manter conversa completa para download
+            
+            # Adicionar informações do CSV original se disponível
+            if df_original is not None and idx <= len(df_original):
+                linha_original = df_original.iloc[idx - 1]
+                
+                # Adicionar retailer/cliente
+                if col_retailer:
+                    resultado["retailer"] = str(linha_original.get(col_retailer, "N/A")).strip()
+                else:
+                    resultado["retailer"] = "N/A"
+                
+                # Adicionar data
+                if col_data:
+                    data_valor = linha_original.get(col_data, "N/A")
+                    resultado["data"] = str(data_valor).strip() if pd.notna(data_valor) else "N/A"
+                else:
+                    resultado["data"] = "N/A"
+                
+                # Adicionar hora (se coluna separada)
+                if col_hora:
+                    hora_valor = linha_original.get(col_hora, "N/A")
+                    resultado["hora"] = str(hora_valor).strip() if pd.notna(hora_valor) else "N/A"
+                else:
+                    resultado["hora"] = "N/A"
+            else:
+                resultado["retailer"] = "N/A"
+                resultado["data"] = "N/A"
+                resultado["hora"] = "N/A"
+            
             resultados.append(resultado)
             
             # Atualizar progresso
@@ -889,12 +997,63 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
         # Criar DataFrame com resultados
         df_resultados = pd.DataFrame(resultados)
         
+        # Garantir que colunas essenciais existam (adicionar se não estiverem presentes)
+        if "sugestao_solucao" not in df_resultados.columns:
+            df_resultados["sugestao_solucao"] = "N/A"
+        if "retailer" not in df_resultados.columns:
+            df_resultados["retailer"] = "N/A"
+        if "data" not in df_resultados.columns:
+            df_resultados["data"] = "N/A"
+        if "hora" not in df_resultados.columns:
+            df_resultados["hora"] = "N/A"
+        if "conversa_completa" not in df_resultados.columns:
+            # Se não existe, tentar recriar a partir das conversas originais
+            # Isso pode acontecer se houver algum problema no processamento
+            df_resultados["conversa_completa"] = ""
+        
+        # Garantir que conversa_completa não seja uma versão resumida
+        # Se conversa_completa está vazia ou é igual à conversa resumida, tentar recuperar da lista original
+        conversas_originais = st.session_state.get('conversas_para_analisar', conversas_para_analisar if 'conversas_para_analisar' in locals() else [])
+        
+        if "conversa_completa" in df_resultados.columns and "conversa" in df_resultados.columns:
+            for idx in df_resultados.index:
+                conv_completa = str(df_resultados.loc[idx, "conversa_completa"]).strip()
+                conv_resumida = str(df_resultados.loc[idx, "conversa"]).strip()
+                
+                # Se conversa_completa está vazia ou é igual à resumida (e a resumida termina com "...")
+                if not conv_completa or (conv_resumida.endswith("...") and conv_completa == conv_resumida):
+                    # Tentar recuperar da lista de conversas originais
+                    num_conversa = df_resultados.loc[idx, "conversa_numero"] if "conversa_numero" in df_resultados.columns else None
+                    if num_conversa and isinstance(num_conversa, (int, float)) and conversas_originais and int(num_conversa) <= len(conversas_originais):
+                        idx_original = int(num_conversa) - 1
+                        if 0 <= idx_original < len(conversas_originais):
+                            df_resultados.loc[idx, "conversa_completa"] = conversas_originais[idx_original]
+                    elif conv_resumida and not conv_resumida.endswith("..."):
+                        # Se a conversa não está resumida, usar ela como completa
+                        df_resultados.loc[idx, "conversa_completa"] = conv_resumida
+        
+        # Preencher valores vazios
+        df_resultados["sugestao_solucao"] = df_resultados["sugestao_solucao"].fillna("N/A")
+        df_resultados["retailer"] = df_resultados["retailer"].fillna("N/A")
+        df_resultados["data"] = df_resultados["data"].fillna("N/A")
+        df_resultados["hora"] = df_resultados["hora"].fillna("N/A")
+        df_resultados["conversa_completa"] = df_resultados["conversa_completa"].fillna("")
+        
+        # Garantir que conversa_completa nunca seja vazia - usar conversa como fallback
+        if "conversa" in df_resultados.columns:
+            mask_vazia = (df_resultados["conversa_completa"].isna()) | (df_resultados["conversa_completa"].astype(str).str.strip() == "")
+            df_resultados.loc[mask_vazia, "conversa_completa"] = df_resultados.loc[mask_vazia, "conversa"]
+        
         # Reordenar colunas
         colunas_ordenadas = [
             "conversa_numero",
+            "retailer",
+            "data",
+            "hora",
             "acao_necessaria",
             "tipo_falha",
             "descricao",
+            "sugestao_solucao",
             "conversa"
         ]
         
@@ -953,6 +1112,27 @@ if 'resultados_processados' in st.session_state and st.session_state['resultados
         hide_index=True
     )
     
+    # Seção de Sugestões de Solução
+    if "acao_necessaria" in df_display.columns and "sugestao_solucao" in df_display.columns:
+        # Filtrar conversas que precisam de ação e têm sugestão
+        df_com_sugestoes = df_display[
+            df_display['acao_necessaria'].apply(
+                lambda x: x if isinstance(x, bool) else str(x).lower() in ["true", "sim", "yes", "1"]
+            ) & 
+            (df_display['sugestao_solucao'] != "N/A") &
+            (df_display['sugestao_solucao'].notna()) &
+            (df_display['sugestao_solucao'].str.strip() != "")
+        ]
+        
+        if not df_com_sugestoes.empty:
+            st.subheader("💡 Sugestões de Solução")
+            st.info(f"📋 Encontradas {len(df_com_sugestoes)} conversa(s) com problemas e sugestões de solução:")
+            
+            for idx, row in df_com_sugestoes.iterrows():
+                with st.expander(f"🔧 Conversa #{row.get('conversa_numero', idx)} - {row.get('tipo_falha', 'Problema identificado')}"):
+                    st.markdown(f"**Problema:** {row.get('descricao', 'N/A')}")
+                    st.markdown(f"**💡 Sugestão de Solução:** {row.get('sugestao_solucao', 'N/A')}")
+    
     # Filtro para destacar conversas que precisam ação
     st.info("💡 **Dica:** Use o filtro abaixo para visualizar apenas as conversas que requerem ação/intervenção.")
     
@@ -979,30 +1159,437 @@ if 'resultados_processados' in st.session_state and st.session_state['resultados
     # Botões de download
     st.subheader("💾 Download do Relatório")
     
+    # Validação: Comparar conversas originais com conversas no DataFrame final
+    st.markdown("### ✅ Validação de Integridade das Conversas")
+    
+    conversas_originais = st.session_state.get('conversas_para_analisar', [])
+    problemas_encontrados = []
+    conversas_validadas = 0
+    
+    if conversas_originais and "conversa_completa" in df_resultados.columns and "conversa_numero" in df_resultados.columns:
+        for idx in df_resultados.index:
+            num_conversa = df_resultados.loc[idx, "conversa_numero"]
+            if isinstance(num_conversa, (int, float)) and int(num_conversa) <= len(conversas_originais):
+                idx_original = int(num_conversa) - 1
+                if 0 <= idx_original < len(conversas_originais):
+                    conversa_original = str(conversas_originais[idx_original])
+                    conversa_no_df = str(df_resultados.loc[idx, "conversa_completa"])
+                    
+                    # Comparar número de caracteres
+                    chars_original = len(conversa_original)
+                    chars_no_df = len(conversa_no_df)
+                    
+                    if chars_original != chars_no_df:
+                        problemas_encontrados.append({
+                            "conversa_numero": int(num_conversa),
+                            "chars_original": chars_original,
+                            "chars_no_df": chars_no_df,
+                            "diferenca": chars_original - chars_no_df
+                        })
+                    else:
+                        conversas_validadas += 1
+        
+        # Exibir resultado da validação
+        if problemas_encontrados:
+            st.error(f"❌ **ATENÇÃO**: {len(problemas_encontrados)} conversa(s) com diferença no número de caracteres detectada(s)!")
+            with st.expander("🔍 Detalhes das conversas com problema", expanded=False):
+                df_problemas = pd.DataFrame(problemas_encontrados)
+                st.dataframe(df_problemas, use_container_width=True, hide_index=True)
+                st.warning("⚠️ As conversas serão corrigidas automaticamente antes do download.")
+            
+            # Corrigir automaticamente as conversas com problema
+            for problema in problemas_encontrados:
+                num_conv = problema["conversa_numero"]
+                idx_original = num_conv - 1
+                if 0 <= idx_original < len(conversas_originais):
+                    # Encontrar a linha no DataFrame
+                    mask = df_resultados["conversa_numero"] == num_conv
+                    if mask.any():
+                        df_resultados.loc[mask, "conversa_completa"] = conversas_originais[idx_original]
+                        st.info(f"✅ Conversa #{num_conv} corrigida: {problema['chars_original']} caracteres restaurados.")
+        else:
+            st.success(f"✅ **Validação concluída**: Todas as {conversas_validadas} conversa(s) têm o mesmo número de caracteres da conversa original analisada!")
+    else:
+        st.info("ℹ️ Validação não disponível: conversas originais não encontradas no session state.")
+    
+    st.markdown("---")
+    
+    # Seção de download filtrado - Conversas que precisam atenção
+    st.markdown("### 🔴 Download Filtrado - Conversas que Precisam Atenção")
+    st.info("💡 Baixe apenas as conversas que requerem ação/intervenção, agrupadas por cliente (retailer), com conversas completas.")
+    
+    # Filtrar conversas que precisam atenção
+    if "acao_necessaria" in df_resultados.columns:
+        df_com_atencao = df_resultados[
+            df_resultados['acao_necessaria'].apply(
+                lambda x: x if isinstance(x, bool) else str(x).lower() in ["true", "sim", "yes", "1"]
+            )
+        ].copy()
+        
+        if not df_com_atencao.empty:
+            # Preparar DataFrame para download filtrado
+            df_download_filtrado = df_com_atencao.copy()
+            
+            # Garantir que conversa_completa contém a conversa completa original
+            # Se conversa_completa não existe ou está truncada, recuperar da lista original
+            conversas_originais = st.session_state.get('conversas_para_analisar', [])
+            
+            if "conversa_completa" in df_download_filtrado.columns:
+                # Verificar e corrigir cada linha para garantir conversa completa
+                for idx in df_download_filtrado.index:
+                    conv_completa_atual = str(df_download_filtrado.loc[idx, "conversa_completa"])
+                    conv_resumida = str(df_download_filtrado.loc[idx, "conversa"]) if "conversa" in df_download_filtrado.columns else ""
+                    
+                    # Se conversa_completa está vazia, truncada ou igual à resumida, recuperar original
+                    if (not conv_completa_atual or 
+                        conv_completa_atual.endswith("...") or 
+                        (conv_resumida.endswith("...") and conv_completa_atual == conv_resumida)):
+                        # Tentar recuperar da lista original
+                        num_conversa = df_download_filtrado.loc[idx, "conversa_numero"] if "conversa_numero" in df_download_filtrado.columns else None
+                        if num_conversa and isinstance(num_conversa, (int, float)) and conversas_originais and int(num_conversa) <= len(conversas_originais):
+                            idx_original = int(num_conversa) - 1
+                            if 0 <= idx_original < len(conversas_originais):
+                                df_download_filtrado.loc[idx, "conversa_completa"] = conversas_originais[idx_original]
+                
+                # Substituir conversa resumida pela conversa completa
+                df_download_filtrado["conversa"] = df_download_filtrado["conversa_completa"].astype(str)
+            
+            # Validação final: Verificar se todas as conversas têm o mesmo número de caracteres da original
+            conversas_originais_validacao = st.session_state.get('conversas_para_analisar', [])
+            if conversas_originais_validacao and "conversa_numero" in df_download_filtrado.columns:
+                for idx in df_download_filtrado.index:
+                    num_conversa = df_download_filtrado.loc[idx, "conversa_numero"]
+                    if isinstance(num_conversa, (int, float)) and int(num_conversa) <= len(conversas_originais_validacao):
+                        idx_original = int(num_conversa) - 1
+                        if 0 <= idx_original < len(conversas_originais_validacao):
+                            conversa_original = str(conversas_originais_validacao[idx_original])
+                            conversa_no_df = str(df_download_filtrado.loc[idx, "conversa_completa"])
+                            
+                            # Se número de caracteres diferente, corrigir
+                            if len(conversa_original) != len(conversa_no_df):
+                                df_download_filtrado.loc[idx, "conversa_completa"] = conversa_original
+            
+            # Selecionar colunas para download (remover conversa_completa se existir)
+            colunas_download = [col for col in df_download_filtrado.columns if col != "conversa_completa"]
+            df_download_filtrado = df_download_filtrado[colunas_download]
+            
+            # Ordenar por retailer (cliente) e depois por data/hora se disponível
+            colunas_ordenacao = []
+            if "retailer" in df_download_filtrado.columns:
+                colunas_ordenacao.append("retailer")
+            if "data" in df_download_filtrado.columns:
+                colunas_ordenacao.append("data")
+            if "hora" in df_download_filtrado.columns:
+                colunas_ordenacao.append("hora")
+            
+            if colunas_ordenacao:
+                df_download_filtrado = df_download_filtrado.sort_values(by=colunas_ordenacao)
+            
+            # Reordenar colunas para download
+            colunas_ordenadas_download = [
+                "retailer",
+                "data",
+                "hora",
+                "conversa_numero",
+                "acao_necessaria",
+                "tipo_falha",
+                "descricao",
+                "sugestao_solucao",
+                "conversa"
+            ]
+            
+            # Manter apenas colunas que existem
+            colunas_finais = [col for col in colunas_ordenadas_download if col in df_download_filtrado.columns]
+            # Adicionar outras colunas que não estão na lista
+            outras_colunas = [col for col in df_download_filtrado.columns if col not in colunas_finais]
+            colunas_finais = colunas_finais + outras_colunas
+            
+            df_download_filtrado = df_download_filtrado[colunas_finais]
+            
+            st.success(f"✅ {len(df_download_filtrado)} conversa(s) que precisam de atenção encontrada(s).")
+            
+            # Validação final antes do download: Comparar número de caracteres
+            conversas_originais_final = st.session_state.get('conversas_para_analisar', [])
+            validacao_final = []
+            if conversas_originais_final and "conversa_numero" in df_download_filtrado.columns and "conversa" in df_download_filtrado.columns:
+                for idx in df_download_filtrado.index:
+                    num_conversa = df_download_filtrado.loc[idx, "conversa_numero"]
+                    if isinstance(num_conversa, (int, float)) and int(num_conversa) <= len(conversas_originais_final):
+                        idx_original = int(num_conversa) - 1
+                        if 0 <= idx_original < len(conversas_originais_final):
+                            conversa_original = str(conversas_originais_final[idx_original])
+                            conversa_no_df = str(df_download_filtrado.loc[idx, "conversa"])
+                            chars_original = len(conversa_original)
+                            chars_no_df = len(conversa_no_df)
+                            validacao_final.append({
+                                "conversa": int(num_conversa),
+                                "chars_original": chars_original,
+                                "chars_planilha": chars_no_df,
+                                "igual": chars_original == chars_no_df
+                            })
+            
+            # Exibir resumo da validação final
+            if validacao_final:
+                todas_iguais = all(v["igual"] for v in validacao_final)
+                if todas_iguais:
+                    st.success(f"✅ **Validação Final**: Todas as {len(validacao_final)} conversa(s) na planilha têm o mesmo número de caracteres da conversa analisada!")
+                else:
+                    diferentes = [v for v in validacao_final if not v["igual"]]
+                    st.error(f"❌ **ATENÇÃO**: {len(diferentes)} conversa(s) com diferença detectada! Corrigindo automaticamente...")
+                    # Corrigir automaticamente
+                    for v in diferentes:
+                        num_conv = v["conversa"]
+                        idx_original = num_conv - 1
+                        if 0 <= idx_original < len(conversas_originais_final):
+                            mask = df_download_filtrado["conversa_numero"] == num_conv
+                            if mask.any():
+                                df_download_filtrado.loc[mask, "conversa"] = conversas_originais_final[idx_original]
+                    st.success("✅ Conversas corrigidas automaticamente!")
+            
+            col_filtrado1, col_filtrado2 = st.columns(2)
+            
+            with col_filtrado1:
+                # CSV filtrado - garantir que conversa seja string completa
+                # Converter conversa para string explícita para evitar truncamento
+                if "conversa" in df_download_filtrado.columns:
+                    df_download_filtrado["conversa"] = df_download_filtrado["conversa"].astype(str)
+                
+                # Salvar CSV sem limitações
+                csv_filtrado = df_download_filtrado.to_csv(
+                    index=False,
+                    quoting=csv.QUOTE_ALL  # QUOTE_ALL para garantir que conversas com vírgulas sejam preservadas
+                ).encode('utf-8-sig')
+                
+                st.download_button(
+                    label="📥 Download CSV (Filtrado)",
+                    data=csv_filtrado,
+                    file_name=f"conversas_atencao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key="download_csv_filtrado"
+                )
+            
+            with col_filtrado2:
+                # Excel filtrado - criar em memória
+                # Garantir que conversa seja string completa
+                if "conversa" in df_download_filtrado.columns:
+                    df_download_filtrado["conversa"] = df_download_filtrado["conversa"].astype(str)
+                
+                # Importar openpyxl para ajustar formatação
+                try:
+                    import openpyxl
+                    from openpyxl.styles import Alignment
+                except ImportError:
+                    openpyxl = None
+                    Alignment = None
+                
+                excel_buffer_filtrado = BytesIO()
+                with pd.ExcelWriter(excel_buffer_filtrado, engine='openpyxl') as writer:
+                    # Agrupar por retailer se disponível
+                    if "retailer" in df_download_filtrado.columns and df_download_filtrado["retailer"].nunique() > 1:
+                        retailers = df_download_filtrado["retailer"].unique()
+                        for retailer in retailers:
+                            if pd.notna(retailer) and str(retailer).strip() != "N/A":
+                                df_retailer = df_download_filtrado[df_download_filtrado["retailer"] == retailer]
+                                sheet_name = str(retailer)[:31]  # Limite de 31 caracteres para nome da aba
+                                df_retailer.to_excel(writer, index=False, sheet_name=sheet_name)
+                                
+                                # Ajustar largura da coluna de conversa para não truncar
+                                worksheet = writer.sheets[sheet_name]
+                                if "conversa" in df_retailer.columns:
+                                    col_idx = df_retailer.columns.get_loc("conversa") + 1
+                                    worksheet.column_dimensions[worksheet.cell(row=1, column=col_idx).column_letter].width = 100
+                                    # Habilitar quebra de texto
+                                    for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row, min_col=col_idx, max_col=col_idx):
+                                        for cell in row:
+                                            if Alignment:
+                                                cell.alignment = Alignment(wrap_text=True, vertical='top')
+                            else:
+                                # Conversas sem retailer definido
+                                df_sem_retailer = df_download_filtrado[
+                                    (df_download_filtrado["retailer"].isna()) | 
+                                    (df_download_filtrado["retailer"].astype(str).str.strip() == "N/A")
+                                ]
+                                if not df_sem_retailer.empty:
+                                    df_sem_retailer.to_excel(writer, index=False, sheet_name="Sem Retailer")
+                                    # Ajustar largura da coluna de conversa
+                                    worksheet = writer.sheets["Sem Retailer"]
+                                    if "conversa" in df_sem_retailer.columns:
+                                        col_idx = df_sem_retailer.columns.get_loc("conversa") + 1
+                                        worksheet.column_dimensions[worksheet.cell(row=1, column=col_idx).column_letter].width = 100
+                                        for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row, min_col=col_idx, max_col=col_idx):
+                                            for cell in row:
+                                                cell.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical='top')
+                    else:
+                        # Se não há retailer ou apenas um, criar uma única aba
+                        df_download_filtrado.to_excel(writer, index=False, sheet_name='Conversas Atenção')
+                        # Ajustar largura da coluna de conversa
+                        worksheet = writer.sheets['Conversas Atenção']
+                        if "conversa" in df_download_filtrado.columns:
+                            col_idx = df_download_filtrado.columns.get_loc("conversa") + 1
+                            worksheet.column_dimensions[worksheet.cell(row=1, column=col_idx).column_letter].width = 100
+                            for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row, min_col=col_idx, max_col=col_idx):
+                                for cell in row:
+                                    cell.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical='top')
+                
+                excel_data_filtrado = excel_buffer_filtrado.getvalue()
+                
+                st.download_button(
+                    label="📥 Download Excel (Filtrado)",
+                    data=excel_data_filtrado,
+                    file_name=f"conversas_atencao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="download_excel_filtrado"
+                )
+        else:
+            st.info("ℹ️ Nenhuma conversa precisa de atenção. Todos os downloads abaixo incluem todas as conversas.")
+    else:
+        st.warning("⚠️ Campo 'acao_necessaria' não encontrado. Downloads abaixo incluem todas as conversas.")
+    
+    st.markdown("---")
+    st.markdown("### 📊 Download Completo - Todas as Conversas")
+    
+    # Preparar DataFrame para download completo com conversas completas
+    df_download_completo = df_resultados.copy()
+    
+    # Garantir que conversa_completa contém a conversa completa original
+    # Se conversa_completa não existe ou está truncada, recuperar da lista original
+    conversas_originais = st.session_state.get('conversas_para_analisar', [])
+    
+    if "conversa_completa" in df_download_completo.columns:
+        # Verificar e corrigir cada linha para garantir conversa completa
+        for idx in df_download_completo.index:
+            conv_completa_atual = str(df_download_completo.loc[idx, "conversa_completa"])
+            conv_resumida = str(df_download_completo.loc[idx, "conversa"]) if "conversa" in df_download_completo.columns else ""
+            
+            # Se conversa_completa está vazia, truncada ou igual à resumida, recuperar original
+            if (not conv_completa_atual or 
+                conv_completa_atual.endswith("...") or 
+                (conv_resumida.endswith("...") and conv_completa_atual == conv_resumida)):
+                # Tentar recuperar da lista original
+                num_conversa = df_download_completo.loc[idx, "conversa_numero"] if "conversa_numero" in df_download_completo.columns else None
+                if num_conversa and isinstance(num_conversa, (int, float)) and conversas_originais and int(num_conversa) <= len(conversas_originais):
+                    idx_original = int(num_conversa) - 1
+                    if 0 <= idx_original < len(conversas_originais):
+                        df_download_completo.loc[idx, "conversa_completa"] = conversas_originais[idx_original]
+        
+        # Validação final: Verificar se todas as conversas têm o mesmo número de caracteres da original
+        conversas_originais_validacao = st.session_state.get('conversas_para_analisar', [])
+        if conversas_originais_validacao and "conversa_numero" in df_download_completo.columns:
+            for idx in df_download_completo.index:
+                num_conversa = df_download_completo.loc[idx, "conversa_numero"]
+                if isinstance(num_conversa, (int, float)) and int(num_conversa) <= len(conversas_originais_validacao):
+                    idx_original = int(num_conversa) - 1
+                    if 0 <= idx_original < len(conversas_originais_validacao):
+                        conversa_original = str(conversas_originais_validacao[idx_original])
+                        conversa_no_df = str(df_download_completo.loc[idx, "conversa_completa"])
+                        
+                        # Se número de caracteres diferente, corrigir
+                        if len(conversa_original) != len(conversa_no_df):
+                            df_download_completo.loc[idx, "conversa_completa"] = conversa_original
+        
+        # Substituir conversa resumida pela conversa completa
+        df_download_completo["conversa"] = df_download_completo["conversa_completa"].astype(str)
+    
+    # Remover coluna conversa_completa se existir (já foi copiada para conversa)
+    if "conversa_completa" in df_download_completo.columns:
+        df_download_completo = df_download_completo.drop(columns=["conversa_completa"])
+    
+    # Validação final antes do download completo: Comparar número de caracteres
+    conversas_originais_final_completo = st.session_state.get('conversas_para_analisar', [])
+    validacao_final_completo = []
+    if conversas_originais_final_completo and "conversa_numero" in df_download_completo.columns and "conversa" in df_download_completo.columns:
+        for idx in df_download_completo.index:
+            num_conversa = df_download_completo.loc[idx, "conversa_numero"]
+            if isinstance(num_conversa, (int, float)) and int(num_conversa) <= len(conversas_originais_final_completo):
+                idx_original = int(num_conversa) - 1
+                if 0 <= idx_original < len(conversas_originais_final_completo):
+                    conversa_original = str(conversas_originais_final_completo[idx_original])
+                    conversa_no_df = str(df_download_completo.loc[idx, "conversa"])
+                    chars_original = len(conversa_original)
+                    chars_no_df = len(conversa_no_df)
+                    validacao_final_completo.append({
+                        "conversa": int(num_conversa),
+                        "chars_original": chars_original,
+                        "chars_planilha": chars_no_df,
+                        "igual": chars_original == chars_no_df
+                    })
+    
+    # Exibir resumo da validação final
+    if validacao_final_completo:
+        todas_iguais = all(v["igual"] for v in validacao_final_completo)
+        if todas_iguais:
+            st.success(f"✅ **Validação Final**: Todas as {len(validacao_final_completo)} conversa(s) na planilha têm o mesmo número de caracteres da conversa analisada!")
+        else:
+            diferentes = [v for v in validacao_final_completo if not v["igual"]]
+            st.error(f"❌ **ATENÇÃO**: {len(diferentes)} conversa(s) com diferença detectada! Corrigindo automaticamente...")
+            # Corrigir automaticamente
+            for v in diferentes:
+                num_conv = v["conversa"]
+                idx_original = num_conv - 1
+                if 0 <= idx_original < len(conversas_originais_final_completo):
+                    mask = df_download_completo["conversa_numero"] == num_conv
+                    if mask.any():
+                        df_download_completo.loc[mask, "conversa"] = conversas_originais_final_completo[idx_original]
+            st.success("✅ Conversas corrigidas automaticamente!")
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        # CSV
-        csv = df_resultados.to_csv(index=False).encode('utf-8-sig')
+        # CSV - garantir que conversa seja string completa
+        if "conversa" in df_download_completo.columns:
+            df_download_completo["conversa"] = df_download_completo["conversa"].astype(str)
+        
+        # Salvar CSV sem limitações
+        csv = df_download_completo.to_csv(
+            index=False,
+            quoting=csv.QUOTE_ALL  # QUOTE_ALL para garantir que conversas com vírgulas sejam preservadas
+        ).encode('utf-8-sig')
+        
         st.download_button(
-            label="📥 Download CSV",
+            label="📥 Download CSV (Completo)",
             data=csv,
-            file_name=f"relatorio_qa_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"relatorio_qa_completo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
             use_container_width=True
         )
     
     with col2:
         # Excel - criar em memória
+        # Garantir que conversa seja string completa
+        if "conversa" in df_download_completo.columns:
+            df_download_completo["conversa"] = df_download_completo["conversa"].astype(str)
+        
+        # Importar openpyxl para ajustar formatação
+        try:
+            import openpyxl
+            from openpyxl.styles import Alignment
+        except ImportError:
+            openpyxl = None
+            Alignment = None
+        
         excel_buffer = BytesIO()
         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            df_resultados.to_excel(writer, index=False, sheet_name='Resultados')
+            df_download_completo.to_excel(writer, index=False, sheet_name='Resultados')
+            
+            # Ajustar largura da coluna de conversa para não truncar
+            worksheet = writer.sheets['Resultados']
+            if "conversa" in df_download_completo.columns:
+                col_idx = df_download_completo.columns.get_loc("conversa") + 1
+                worksheet.column_dimensions[worksheet.cell(row=1, column=col_idx).column_letter].width = 100
+                # Habilitar quebra de texto
+                for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row, min_col=col_idx, max_col=col_idx):
+                    for cell in row:
+                        if Alignment:
+                            cell.alignment = Alignment(wrap_text=True, vertical='top')
+        
         excel_data = excel_buffer.getvalue()
         
         st.download_button(
-            label="📥 Download Excel",
+            label="📥 Download Excel (Completo)",
             data=excel_data,
-            file_name=f"relatorio_qa_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            file_name=f"relatorio_qa_completo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )

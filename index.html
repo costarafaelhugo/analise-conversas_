@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analista de Conversas - QA Chatbot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 40px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        header p {
+            font-size: 1.3em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .section h3 {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin: 25px 0 15px 0;
+        }
+        
+        .section p, .section li {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            color: #555;
+        }
+        
+        .section ul {
+            margin-left: 30px;
+            margin-top: 10px;
+        }
+        
+        .section li {
+            margin-bottom: 8px;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .feature-card {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .feature-card h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin: 5px 5px 5px 0;
+        }
+        
+        footer {
+            background: #2d2d2d;
+            color: white;
+            text-align: center;
+            padding: 30px;
+            margin-top: 40px;
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 Analista de Conversas</h1>
+            <p>QA Chatbot - Análise Automatizada de Qualidade de Atendimento</p>
+        </header>
+        
+        <div class="content">
+            <section class="section">
+                <h2>📋 Sobre o Projeto</h2>
+                <p>
+                    Aplicação web para análise automatizada de qualidade de atendimento de chatbots 
+                    usando inteligência artificial. O sistema processa conversas e identifica 
+                    problemas, necessidades de transbordo e oportunidades de melhoria.
+                </p>
+            </section>
+            
+            <section class="section">
+                <h2>🚀 Funcionalidades</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>📤 Upload de Arquivos</h4>
+                        <p>Suporte para arquivos TXT ou CSV com múltiplas conversas</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>🤖 Análise com IA</h4>
+                        <p>Análise automatizada usando modelos de linguagem avançados</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>📊 Visualização</h4>
+                        <p>Resultados apresentados em tabelas interativas e estatísticas</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>💾 Exportação</h4>
+                        <p>Download de relatórios em CSV ou Excel formatado</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>🔍 Filtros</h4>
+                        <p>Filtro para conversas que precisam de atenção especial</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>✅ Validação</h4>
+                        <p>Validação automática de integridade das conversas</p>
+                    </div>
+                </div>
+            </section>
+            
+            <section class="section">
+                <h2>📁 Formato dos Arquivos</h2>
+                
+                <h3>Arquivo TXT</h3>
+                <p>As conversas devem ser separadas por uma linha contendo <code>---</code> (três traços):</p>
+                <div class="code-block">
+Cliente: Olá<br>
+Bot: Olá! Como posso ajudar?<br>
+---<br>
+Cliente: Preciso de ajuda<br>
+Bot: Claro, estou aqui!
+                </div>
+                
+                <h3>Arquivo CSV</h3>
+                <p>O arquivo deve conter uma coluna chamada <code>conversa</code>:</p>
+                <div class="code-block">
+conversa<br>
+"Cliente: Olá\nBot: Olá! Como posso ajudar?"<br>
+"Cliente: Preciso de ajuda\nBot: Claro, estou aqui!"
+                </div>
+            </section>
+            
+            <section class="section">
+                <h2>📊 Campos de Análise</h2>
+                <p>Para cada conversa, o sistema retorna:</p>
+                <ul>
+                    <li><strong>ação_necessária</strong>: Indica se há necessidade de ação/intervenção</li>
+                    <li><strong>tipo_falha</strong>: Tipo de falha identificada na conversa</li>
+                    <li><strong>descrição</strong>: Descrição detalhada do problema encontrado</li>
+                    <li><strong>sugestão_solucão</strong>: Sugestões para resolver o problema</li>
+                </ul>
+            </section>
+            
+            <section class="section">
+                <h2>🔧 Tecnologias</h2>
+                <span class="badge">Python</span>
+                <span class="badge">Streamlit</span>
+                <span class="badge">OpenAI API</span>
+                <span class="badge">Pandas</span>
+                <span class="badge">Análise Local</span>
+            </section>
+            
+            <section class="section">
+                <h2>📝 Instalação e Uso</h2>
+                <p>Para executar a aplicação localmente:</p>
+                <div class="code-block">
+# Instalar dependências<br>
+pip install -r requirements.txt<br><br>
+# Executar aplicação<br>
+streamlit run app.py
+                </div>
+            </section>
+        </div>
+        
+        <footer>
+            <p>&copy; 2024 Analista de Conversas - QA Chatbot</p>
+            <p>Projeto de uso interno</p>
+        </footer>
+    </div>
+</body>
+</html>
+
