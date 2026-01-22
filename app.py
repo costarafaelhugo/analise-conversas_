@@ -943,6 +943,8 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
         col_data = encontrar_coluna(df_original, ['data', 'date', 'data_hora', 'datetime', 'timestamp'])
         col_hora = encontrar_coluna(df_original, ['hora', 'time', 'horario'])
         col_conversa_original = encontrar_coluna(df_original, ['conversa', 'conversation'])
+        col_csr_id = encontrar_coluna(df_original, ['csr id', 'csr_id', 'csrid', 'csr', 'atendente id', 'atendente_id'])
+        col_chat_id = encontrar_coluna(df_original, ['chat id', 'chat_id', 'chatid', 'chat', 'conversation id', 'conversation_id'])
         
         # Iterar sobre as conversas (limitadas)
         total_conversas = len(conversas_para_analisar)
@@ -981,10 +983,26 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
                     resultado["hora"] = str(hora_valor).strip() if pd.notna(hora_valor) else "N/A"
                 else:
                     resultado["hora"] = "N/A"
+                
+                # Adicionar csr id
+                if col_csr_id:
+                    csr_id_valor = linha_original.get(col_csr_id, "N/A")
+                    resultado["csr_id"] = str(csr_id_valor).strip() if pd.notna(csr_id_valor) else "N/A"
+                else:
+                    resultado["csr_id"] = "N/A"
+                
+                # Adicionar chat id
+                if col_chat_id:
+                    chat_id_valor = linha_original.get(col_chat_id, "N/A")
+                    resultado["chat_id"] = str(chat_id_valor).strip() if pd.notna(chat_id_valor) else "N/A"
+                else:
+                    resultado["chat_id"] = "N/A"
             else:
                 resultado["retailer"] = "N/A"
                 resultado["data"] = "N/A"
                 resultado["hora"] = "N/A"
+                resultado["csr_id"] = "N/A"
+                resultado["chat_id"] = "N/A"
             
             resultados.append(resultado)
             
@@ -1006,6 +1024,10 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
             df_resultados["data"] = "N/A"
         if "hora" not in df_resultados.columns:
             df_resultados["hora"] = "N/A"
+        if "csr_id" not in df_resultados.columns:
+            df_resultados["csr_id"] = "N/A"
+        if "chat_id" not in df_resultados.columns:
+            df_resultados["chat_id"] = "N/A"
         if "conversa_completa" not in df_resultados.columns:
             # Se não existe, tentar recriar a partir das conversas originais
             # Isso pode acontecer se houver algum problema no processamento
@@ -1037,6 +1059,8 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
         df_resultados["retailer"] = df_resultados["retailer"].fillna("N/A")
         df_resultados["data"] = df_resultados["data"].fillna("N/A")
         df_resultados["hora"] = df_resultados["hora"].fillna("N/A")
+        df_resultados["csr_id"] = df_resultados["csr_id"].fillna("N/A") if "csr_id" in df_resultados.columns else "N/A"
+        df_resultados["chat_id"] = df_resultados["chat_id"].fillna("N/A") if "chat_id" in df_resultados.columns else "N/A"
         df_resultados["conversa_completa"] = df_resultados["conversa_completa"].fillna("")
         
         # Garantir que conversa_completa nunca seja vazia - usar conversa como fallback
@@ -1050,6 +1074,8 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
             "retailer",
             "data",
             "hora",
+            "csr_id",
+            "chat_id",
             "acao_necessaria",
             "tipo_falha",
             "descricao",
@@ -1290,6 +1316,8 @@ if 'resultados_processados' in st.session_state and st.session_state['resultados
                 "retailer",
                 "data",
                 "hora",
+                "csr_id",
+                "chat_id",
                 "conversa_numero",
                 "acao_necessaria",
                 "tipo_falha",
