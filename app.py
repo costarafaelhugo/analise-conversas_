@@ -138,8 +138,8 @@ Determinar se uma **INTERVENÇÃO HUMANA** é necessária baseada estritamente n
 O agente "WHIZZ PÓS-VENDAS" é responsável por:
 
 - Tirar dúvidas sobre status do pedido.
-- Processar trocas e devoluções.
-- Emitir ou consultar vale-trocas.
+- Tirar duvidas sobre trocas e devoluções.
+- Consultar vale-trocas.
 
 # Critérios de Análise (A Lógica de Decisão)
 
