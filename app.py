@@ -15,7 +15,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Ocultar elementos do Streamlit Cloud (avatar do criador e footer)
+# Ocultar elementos do Streamlit Cloud (avatar do criador, footer e "created by")
 st.markdown(
     """
     <style>
@@ -35,7 +35,66 @@ st.markdown(
         div:has(div[class*="profileContainer"]) {
             display: none !important;
         }
+        
+        /* Ocultar elementos do Streamlit Cloud footer */
+        footer,
+        [data-testid="stFooter"],
+        div[data-testid="stFooter"] {
+            display: none !important;
+            visibility: hidden !important;
+        }
     </style>
+    <script>
+        // Ocultar elementos que contenham "created by" ou "hugo costa"
+        function ocultarElementosCriador() {
+            const textosParaOcultar = ['created by', 'Created by', 'CREATED BY', 'hugo costa', 'Hugo Costa', 'HUGO COSTA'];
+            
+            // Função recursiva para verificar todos os elementos
+            function verificarElemento(elemento) {
+                if (!elemento) return;
+                
+                const texto = elemento.textContent || elemento.innerText || '';
+                const textoLower = texto.toLowerCase();
+                
+                // Verificar se o elemento ou seus filhos contêm os textos
+                for (const textoProcurado of textosParaOcultar) {
+                    if (textoLower.includes(textoProcurado.toLowerCase())) {
+                        elemento.style.display = 'none';
+                        elemento.style.visibility = 'hidden';
+                        return;
+                    }
+                }
+                
+                // Verificar filhos
+                if (elemento.children) {
+                    for (const filho of elemento.children) {
+                        verificarElemento(filho);
+                    }
+                }
+            }
+            
+            // Executar quando a página carregar e periodicamente
+            setTimeout(() => {
+                document.querySelectorAll('*').forEach(el => {
+                    verificarElemento(el);
+                });
+            }, 100);
+            
+            // Executar periodicamente para pegar elementos carregados dinamicamente
+            setInterval(() => {
+                document.querySelectorAll('*').forEach(el => {
+                    verificarElemento(el);
+                });
+            }, 1000);
+        }
+        
+        // Executar quando o DOM estiver pronto
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', ocultarElementosCriador);
+        } else {
+            ocultarElementosCriador();
+        }
+    </script>
     """,
     unsafe_allow_html=True
 )
