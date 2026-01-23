@@ -15,6 +15,31 @@ st.set_page_config(
     layout="wide"
 )
 
+# Ocultar elementos do Streamlit Cloud (avatar do criador e footer)
+st.markdown(
+    """
+    <style>
+        /* Ocultar avatar do criador */
+        ._profileContainer_gzau3_53,
+        div[class*="profileContainer"],
+        div[class*="profilePreview"],
+        a[href*="share.streamlit.io/user"],
+        img[alt="App Creator Avatar"],
+        img[data-testid="appCreatorAvatar"] {
+            display: none !important;
+            visibility: hidden !important;
+        }
+        
+        /* Ocultar qualquer elemento com profileContainer */
+        div:has(._profileContainer_gzau3_53),
+        div:has(div[class*="profileContainer"]) {
+            display: none !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Título da aplicação
 st.title("🤖 Analista de Conversas - QA Chatbot")
 st.markdown("---")
@@ -1622,14 +1647,4 @@ if 'resultados_processados' in st.session_state and st.session_state['resultados
             use_container_width=True
         )
 
-# Footer
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: center; color: gray;'>
-        <p>Analista de Conversas - QA Chatbot | Powered by OpenAI</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
 
