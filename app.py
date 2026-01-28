@@ -209,64 +209,144 @@ def extract_json_from_text(text: str) -> Dict:
 # Função para criar prompt do sistema
 def criar_prompt_sistema(conversa: str) -> str:
     """Cria o prompt estruturado para análise da conversa via OpenAI"""
-    prompt = f"""# Role
+    prompt = f"""TAREFA:
+Analisar a conversa entre CLIENTE e o sistema (WHIZZ + ATENDENTE BOT, avaliados como um único agente) e determinar se a conversa PRECISA DE ATENÇÃO por TER HAVIDO NECESSIDADE REAL de transferência para atendimento humano.
 
-Você é um Auditor de Qualidade de Atendimento Automatizado (QA). Sua função é analisar conversas entre clientes e o agente de IA "WHIZZ PÓS-VENDAS".
+IMPORTANTE:
+Este é um AGENTE DE ANÁLISE DE CONVERSAS.
+Não é um agente de pós-vendas nem um agente operacional.
+Avalie apenas o comportamento do sistema, sua aderência ao escopo e sua capacidade de conduzir corretamente a conversa.
 
-# Objetivo
-
-Determinar se uma **INTERVENÇÃO HUMANA** é necessária baseada estritamente no desempenho técnico e procedimental do agente.
-
-# Contexto do Agente
-
-O agente "WHIZZ PÓS-VENDAS" é responsável por:
-
-- Tirar dúvidas sobre status do pedido.
-- Tirar duvidas sobre trocas e devoluções.
-- Consultar vale-trocas.
-
-# Critérios de Análise (A Lógica de Decisão)
-
-Você deve marcar `acao_necessaria: true` **APENAS** se ocorrerem as seguintes falhas específicas do agente:
-
-1. **Alucinação:** O agente inventou informações, forneceu dados incoerentes com o contexto ou prometeu algo impossível.
-
-2. **Falha no Transbordo:** O agente identificou uma situação complexa que exigia humano, mas não realizou o transbordo/transferência.
-
-3. **Omissão de SAC:** O cliente solicitou explicitamente o link do SAC ou contato com suporte, e o agente falhou em fornecer o link ou o contato.
-
-# O Que IGNORAR (Não requer ação sobre o agente)
-
-Você deve marcar `acao_necessaria: false` se o problema for externo ao comportamento do bot, mesmo que o cliente esteja insatisfeito. **NÃO sinalize** ação para:
-
-- Atrasos na entrega (Culpa da transportadora/logística).
-- Entregas não recebidas/extraviadas.
-- Problemas logísticos gerais.
-- Insatisfação do cliente com prazos ou políticas da empresa (desde que o agente tenha informado corretamente).
-
-# Formato de Resposta
-
-Analise a seguinte conversa e retorne APENAS um objeto JSON válido com os seguintes campos (sem formatação markdown, apenas JSON puro):
-
+RETORNO (JSON EXATO – sem texto adicional):
 {{
-    "acao_necessaria": true ou false,
-    "tipo_falha": "string" (se acao_necessaria for true: "Alucinação", "Falha no Transbordo", "Omissão de SAC", ou "N/A" se false),
-    "descricao": "string" (descrição detalhada do problema encontrado ou confirmação de que não há problema),
-    "sugestao_solucao": "string" (se acao_necessaria for true, forneça uma sugestão prática e específica de como corrigir ou melhorar o comportamento do agente para evitar o problema no futuro. Se acao_necessaria for false, use "N/A")
+  "had_need_to_transfer": true
+}}
+OU
+{{
+  "had_need_to_transfer": false
 }}
 
-# Instruções para Sugestão de Solução
+---------------------------------------------------------------------
 
-Quando `acao_necessaria` for `true`, a `sugestao_solucao` deve:
-- Ser específica e acionável
-- Focar em melhorias no comportamento do agente
-- Sugerir ajustes no fluxo, treinamento ou configuração do bot
-- Ser prática e implementável
-- Exemplos:
-  - "Adicionar validação de dados antes de informar status do pedido"
-  - "Implementar detecção automática de casos complexos e transbordo imediato"
-  - "Incluir link do SAC na resposta quando cliente solicitar contato humano"
-  - "Melhorar treinamento sobre políticas de troca para evitar informações incorretas"
+ESCOPO DO AGENTE DE PÓS-VENDAS (COMPORTAMENTO CORRETO)
+
+Considere comportamento correto quando o sistema:
+- Informa status do pedido quando o pedido já estiver faturado e houver identificador (pedido, CPF ou e-mail)
+- Informa código de rastreamento apenas quando o pedido estiver com status "shipped / enviado"
+- Informa status de troca ou devolução
+- Informa código de postagem
+- Informa vale-troca somente quando a troca/devolução estiver finalizada, aprovada e o código estiver disponível
+- Responde dúvidas gerais sobre troca e devolução
+- Informa passo a passo para realizar troca ou devolução
+- Transborda para atendimento humano OU envia formulário quando não possui informação ou quando o assunto está fora do escopo
+
+Conversas em que o sistema atua corretamente nesses pontos NÃO precisam de atenção.
+
+---------------------------------------------------------------------
+
+FORA DE ESCOPO DO AGENTE DE PÓS-VENDAS
+
+Considere fora de escopo quando o sistema tenta:
+- Realizar efetivamente troca ou devolução
+- Realizar cancelamento de pedidos
+- Auxiliar em casos de pedido atrasado
+- Fazer qualquer alteração em pedidos já em andamento
+- Atender pré-venda:
+  - comprar produtos
+  - adicionar itens ao carrinho
+  - dúvidas de tamanho
+  - uso de cashback
+  - qualquer ajuda relacionada à compra
+
+Nesses casos:
+- O sistema deve informar que atende apenas pós-vendas
+- A transferência para humano só é necessária se o cliente INSISTIR em manter a conversa
+
+---------------------------------------------------------------------
+
+CASO PRIORITÁRIO (REGRA ABSOLUTA)
+
+Se ocorrer:
+- Cliente relata "não recebi vale" ou "não recebi estorno"
+- Sistema informa prazo de processamento ("7 dias após recebimento" ou equivalente)
+- Cliente insiste
+- Sistema entra em loop de resposta ou avaliação
+
+→ Retorne false IMEDIATAMENTE.
+Motivo: prazo informado = demanda resolvida.
+
+---------------------------------------------------------------------
+
+CRITÉRIOS OBRIGATÓRIOS DE PONTO DE ATENÇÃO
+(SE QUALQUER UM OCORRER → had_need_to_transfer = true)
+
+1. PEDIDO DE HUMANO IGNORADO
+- Cliente pede atendimento humano ou confirma o transbordo
+- E a transferência NÃO acontece
+- E nenhum formulário é enviado
+
+---------------------------------------------------------------------
+
+2. FALTA DE POSICIONAMENTO COMO PÓS-VENDAS
+- Conversa sobre compra, tamanho, cashback ou pré-venda
+- E o sistema NÃO informa que é um agente de pós-vendas
+
+---------------------------------------------------------------------
+
+3. LOOPING DE RECEPÇÃO
+- Sistema continua enviando mensagens como:
+  "oi", "tudo bem", "como posso ajudar"
+- Mesmo após o cliente já ter explicado claramente a demanda
+
+---------------------------------------------------------------------
+
+4. REPETIÇÃO EXCESSIVA SEM AVANÇO
+- Sistema repete a mesma frase ou resposta várias vezes
+- Sem resolver a demanda
+- E sem transbordar ou enviar formulário
+
+---------------------------------------------------------------------
+
+5. TENTATIVA DE RESOLVER ASSUNTO FORA DO ESCOPO
+- Sistema tenta conduzir ou resolver temas que não pode atender
+- Em vez de orientar corretamente ou transbordar
+
+---------------------------------------------------------------------
+
+6. BUSCA DE PEDIDO SEM DADOS MÍNIMOS
+- Sistema informa que não encontrou o pedido
+- Sem o cliente ter informado número do pedido, CPF ou e-mail
+
+---------------------------------------------------------------------
+
+7. SOLICITAÇÃO INCOMPLETA DE DADOS
+- Sistema solicita apenas um identificador (ex.: só pedido, só CPF ou só e-mail)
+- Não encontra o pedido
+- E NÃO pergunta se é possível localizar por outra fonte disponível
+
+---------------------------------------------------------------------
+
+CRITÉRIOS DE NÃO ATENÇÃO (RETORNAR false)
+
+- Demanda resolvida com prazo ou processo informado
+- Cliente abandona a conversa ou não fornece dados solicitados
+- Erros técnicos de roteamento
+- Loop de avaliação ou nota
+- Assuntos fora de escopo tratados corretamente sem insistência do cliente
+- Sistema informa corretamente limitações e orienta o cliente
+
+---------------------------------------------------------------------
+
+REGRAS FINAIS
+
+- Avalie se o SISTEMA conduziu corretamente a conversa
+- Ignore insatisfação genérica
+- Ignore quem respondeu (bot ou humano)
+- Avalie comportamento, escopo e tomada de decisão
+- Se houve falha de condução que exigiria humano → true
+- Caso contrário → false
+
+RETORNE APENAS O JSON FINAL.
 
 CONVERSA A SER ANALISADA:
 {conversa}
@@ -389,28 +469,40 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             }
         
         # Validar e padronizar campos
-        acao_necessaria = resultado_json.get("acao_necessaria", False)
-        if isinstance(acao_necessaria, str):
-            acao_necessaria = acao_necessaria.lower() in ["true", "sim", "yes", "1"]
+        # Processar had_need_to_transfer (novo formato) ou acao_necessaria (formato antigo para compatibilidade)
+        had_need_to_transfer = resultado_json.get("had_need_to_transfer", None)
+        acao_necessaria_old = resultado_json.get("acao_necessaria", None)
+        
+        # Converter had_need_to_transfer para acao_necessaria
+        if had_need_to_transfer is not None:
+            if isinstance(had_need_to_transfer, str):
+                acao_necessaria = had_need_to_transfer.lower() in ["true", "sim", "yes", "1"]
+            else:
+                acao_necessaria = bool(had_need_to_transfer)
+        elif acao_necessaria_old is not None:
+            if isinstance(acao_necessaria_old, str):
+                acao_necessaria = acao_necessaria_old.lower() in ["true", "sim", "yes", "1"]
+            else:
+                acao_necessaria = bool(acao_necessaria_old)
+        else:
+            acao_necessaria = False
         
         resultado_json["acao_necessaria"] = bool(acao_necessaria)
-        resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "N/A")).strip()
-        resultado_json["descricao"] = str(resultado_json.get("descricao", "Sem descrição")).strip()
+        
+        # Criar tipo_falha e descricao baseados no resultado
+        if acao_necessaria:
+            resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "Necessidade de Transferência")).strip()
+            resultado_json["descricao"] = str(resultado_json.get("descricao", "Conversa precisa de atenção - houve necessidade real de transferência para atendimento humano")).strip()
+        else:
+            resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "N/A")).strip()
+            resultado_json["descricao"] = str(resultado_json.get("descricao", "Conversa processada corretamente - não houve necessidade de transferência")).strip()
         
         # Processar sugestão de solução
         sugestao = resultado_json.get("sugestao_solucao", "")
         if not sugestao or sugestao.strip() == "":
             # Se não foi fornecida e há ação necessária, criar uma sugestão genérica
-            if resultado_json["acao_necessaria"]:
-                tipo = resultado_json["tipo_falha"]
-                if "Alucinação" in tipo:
-                    sugestao = "Revisar base de conhecimento e adicionar validação de dados antes de informar ao cliente"
-                elif "Transbordo" in tipo:
-                    sugestao = "Implementar detecção automática de casos complexos e fluxo de transbordo imediato"
-                elif "SAC" in tipo:
-                    sugestao = "Incluir link do SAC e opção de contato humano quando cliente solicitar"
-                else:
-                    sugestao = "Revisar fluxo conversacional e melhorar detecção de intents do cliente"
+            if acao_necessaria:
+                sugestao = "Revisar fluxo conversacional e melhorar detecção de casos que requerem transferência para atendimento humano"
             else:
                 sugestao = "N/A"
         
