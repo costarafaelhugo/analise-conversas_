@@ -228,42 +228,13 @@ Não é um agente de pós-vendas nem um agente operacional.
 Avalie apenas o comportamento do sistema, sua aderência ao escopo e sua capacidade de conduzir corretamente a conversa.
 
 RETORNO (JSON EXATO – sem texto adicional):
-
-Se had_need_to_transfer = true:
 {{
-  "had_need_to_transfer": true,
-  "motivo_transbordo": "Breve motivo (ex.: Pedido de humano ignorado; Looping de recepção; Status de pedido - Reembolso atrasado; Falhas da IA - looping)"
+  "had_need_to_transfer": true
 }}
-
-Se had_need_to_transfer = false:
+OU
 {{
-  "had_need_to_transfer": false,
-  "motivo_transbordo": "N/A"
+  "had_need_to_transfer": false
 }}
-
-Sempre inclua o campo motivo_transbordo. Use um dos MOTIVOS DE TRANSBORDO ou dos CRITÉRIOS DE PONTO DE ATENÇÃO quando for true; use "N/A" quando for false.
-
----------------------------------------------------------------------
-
-PROCESSO OBRIGATÓRIO DE RACIOCÍNIO (NÃO EXIBIR NA RESPOSTA)
-
-Sempre classifique mentalmente o tipo de transbordo ocorrido:
-
-1. TRANSBORDO OPERACIONAL NECESSÁRIO
-Transferência correta devido a limitação legítima do agente ou natureza do caso.
-Não representa falha de condução.
-
-2. TRANSBORDO POR FALHA DE CONDUÇÃO
-Transferência ocorreu porque o sistema:
-- não soube conduzir
-- errou decisão
-- não seguiu escopo
-- gerou fricção evitável
-- falhou cognitivamente
-
-Somente o tipo 2 pode gerar had_need_to_transfer = true.
-
-Se o transbordo for operacional e correto → false.
 
 ---------------------------------------------------------------------
 
@@ -312,74 +283,99 @@ Se ocorrer:
 - Sistema entra em loop de resposta ou avaliação
 
 → Retorne false IMEDIATAMENTE.
+Motivo: prazo informado = demanda resolvida.
 
 ---------------------------------------------------------------------
 
 MOTIVOS DE TRANSBORDO (CLASSIFICAÇÃO CONTEXTUAL)
 
-Os temas abaixo são motivos comuns para transbordo.
-Eles podem ser operacionais ou falha de condução — depende da execução do agente.
+Os temas abaixo são motivos comuns para transbordo.  
+IMPORTANTE: a existência de transbordo nesses casos NÃO significa falha do sistema.  
+Só é ponto de atenção se o agente conduziu incorretamente ou falhou na tomada de decisão.
 
 1. Status de pedido
-- Pedido atrasado
-- Pedido entregue mas não recebido
-- Endereço incorreto informado pelo cliente
-- Reembolso ou estorno atrasado
+- Pedido atrasado ou atraso na entrega
+- Pedido consta como entregue, mas não foi recebido
+- Endereço informado errado pelo cliente
+- Reembolso ou estorno atrasado (cliente quer previsão)
 - Dúvida sobre onde usar código de rastreio
-- Status de ticket aberto
+- Status de ticket ou formulário já aberto
 - Pedido devolvido após tentativa de entrega
 
 2. Troca e devolução
-- Detalhes adicionais do status
-- Problema ao aplicar vale
-- Prazo expirado com pedido de exceção
-- Questionamento sobre prazo de estorno
-- Problema com código de postagem
+- Cliente quer mais detalhes do status da troca ou devolução
+- Problemas ao aplicar vale-troca ou vale-compra
+- Prazo expirado e solicitação de exceção
+- Questionamento sobre prazo de estorno ou reembolso
+- Problema ou solicitação de novo código de postagem
 
 3. Alteração de pedido
-- Alteração de produto em andamento
-- Alteração de e-mail ou dados
-- Mudança de forma de pagamento ou devolução
+- Alteração de produto em pedido em andamento
+- Alteração de e-mail ou dados cadastrais
+- Mudança na forma de pagamento ou tipo de devolução
 
 4. Cancelamento
 - Solicitação de cancelamento
-- Dúvida sobre pedido cancelado
+- Dúvidas sobre pedido cancelado
 
 5. Falhas da IA
-- Alucinação ou looping
-- Sistema não encontra pedido mas humano encontra com mesmos dados
+- Alucinação ou looping operacional
+- Sistema não identifica pedido, mas humano consegue com os mesmos dados
 
 6. Outros temas
-- Venda
-- Pedido direto de humano sem interação
-- Loja física
-- Registros vagos ou fora de escopo
+- Dúvidas de venda (estoque, tamanho, defeitos, cupons)
+- Pedido direto de atendimento humano sem interação mínima
+- Loja física (retirada, trocas, estoque)
+- Registros sem descrição clara ou fora do escopo
 
 ---------------------------------------------------------------------
 
 CRITÉRIOS OBRIGATÓRIOS DE PONTO DE ATENÇÃO
 (SE QUALQUER UM OCORRER → had_need_to_transfer = true)
 
-1. Pedido de humano ignorado
-2. Falta de posicionamento como pós-vendas
-3. Looping de recepção
-4. Repetição excessiva sem avanço
-5. Tentativa de resolver fora do escopo
-6. Busca de pedido sem dados mínimos
-7. Solicitação incompleta de dados
-8. Transbordo causado por falha cognitiva evitável do sistema
+1. PEDIDO DE HUMANO IGNORADO
+- Cliente pede atendimento humano ou confirma o transbordo
+- E a transferência NÃO acontece
+- E nenhum formulário é enviado
+
+2. FALTA DE POSICIONAMENTO COMO PÓS-VENDAS
+- Conversa sobre compra, tamanho, cashback ou pré-venda
+- E o sistema NÃO informa que é um agente de pós-vendas
+
+3. LOOPING DE RECEPÇÃO
+- Sistema continua enviando mensagens como:
+  "oi", "tudo bem", "como posso ajudar"
+- Mesmo após o cliente já ter explicado claramente a demanda
+
+4. REPETIÇÃO EXCESSIVA SEM AVANÇO
+- Sistema repete a mesma frase ou resposta várias vezes
+- Sem resolver a demanda
+- E sem transbordar ou enviar formulário
+
+5. TENTATIVA DE RESOLVER ASSUNTO FORA DO ESCOPO
+- Sistema tenta conduzir ou resolver temas que não pode atender
+- Em vez de orientar corretamente ou transbordar
+
+6. BUSCA DE PEDIDO SEM DADOS MÍNIMOS
+- Sistema informa que não encontrou o pedido
+- Sem o cliente ter informado número do pedido, CPF ou e-mail
+
+7. SOLICITAÇÃO INCOMPLETA DE DADOS
+- Sistema solicita apenas um identificador
+- Não encontra o pedido
+- E NÃO pergunta se é possível localizar por outra fonte disponível
 
 ---------------------------------------------------------------------
 
 CRITÉRIOS DE NÃO ATENÇÃO (RETORNAR false)
 
-- Transbordo operacional correto
-- Demanda resolvida com prazo informado
-- Cliente abandona conversa
+- Demanda resolvida com prazo ou processo informado
+- Cliente abandona a conversa ou não fornece dados solicitados
 - Erros técnicos de roteamento
-- Loop de avaliação
-- Fora de escopo tratado corretamente
-- Sistema informa limitações corretamente
+- Loop de avaliação ou nota
+- Assuntos fora de escopo tratados corretamente sem insistência do cliente
+- Sistema informa corretamente limitações e orienta o cliente
+- Transbordo realizado corretamente para temas legítimos
 
 ---------------------------------------------------------------------
 
@@ -387,10 +383,10 @@ REGRAS FINAIS
 
 - Avalie se o SISTEMA conduziu corretamente a conversa
 - Ignore insatisfação genérica
-- Ignore quem respondeu
-- Avalie causalidade do transbordo
-- Falha de condução evitável → true
-- Limitação operacional legítima → false
+- Ignore quem respondeu (bot ou humano)
+- Avalie comportamento, escopo e tomada de decisão
+- Se houve falha de condução que exigiria humano → true
+- Caso contrário → false
 
 RETORNE APENAS O JSON FINAL.
 
