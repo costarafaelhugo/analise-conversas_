@@ -143,16 +143,6 @@ delay_entre_requisicoes = st.sidebar.slider(
 
 st.sidebar.info("💡 **Dica**: Se receber erros de rate limit, aumente o delay entre requisições.")
 
-# Selecione o Agente (QA vs Categorias)
-st.sidebar.markdown("---")
-st.sidebar.subheader("🤖 Selecione o Agente")
-tipo_agente = st.sidebar.radio(
-    "Agente Analista",
-    options=["Analista de Conversas (QA)", "Analista de Categorias"],
-    index=0,
-    help="Analista de Conversas (QA): análise de necessidade de transferência. Analista de Categorias: classificação por categoria (Pós-vendas, Dúvidas, Reclamações, etc.)."
-)
-
 # Configuração geral - Limite de conversas
 st.sidebar.markdown("---")
 st.sidebar.subheader("📊 Configurações de Processamento")
@@ -219,95 +209,58 @@ def extract_json_from_text(text: str) -> Dict:
 # Função para criar prompt do sistema
 def criar_prompt_sistema(conversa: str) -> str:
     """Cria o prompt estruturado para análise da conversa via OpenAI"""
-    prompt = f"""Analisar a conversa entre CLIENTE e o sistema (WHIZZ + ATENDENTE BOT, avaliados como um único agente) e determinar se a conversa PRECISA DE ATENÇÃO por TER HAVIDO NECESSIDADE REAL de transferência para atendimento humano.
+    prompt = f"""TAREFA:
+Analisar a conversa entre CLIENTE e o sistema (WHIZZ + ATENDENTE BOT, avaliados como um único agente) e determinar se a conversa PRECISA DE ATENÇÃO por TER HAVIDO NECESSIDADE REAL de transferência para atendimento humano.
 
 IMPORTANTE:
-
 Este é um AGENTE DE ANÁLISE DE CONVERSAS.
-
 Não é um agente de pós-vendas nem um agente operacional.
-
 Avalie apenas o comportamento do sistema, sua aderência ao escopo e sua capacidade de conduzir corretamente a conversa.
 
----------------------------------------------------------------------
-
-RETORNO (JSON EXATO – sem texto adicional)
-
+RETORNO (JSON EXATO – sem texto adicional):
 {{
   "had_need_to_transfer": true
 }}
-
 OU
-
 {{
   "had_need_to_transfer": false
 }}
 
 ---------------------------------------------------------------------
 
-CONTEXTO DO AGENTE DE PÓS-VENDAS
+PROCESSO OBRIGATÓRIO DE RACIOCÍNIO (NÃO EXIBIR NA RESPOSTA)
 
-O agente atua exclusivamente em pós-vendas.
+Sempre classifique mentalmente o tipo de transbordo ocorrido:
 
-HABILIDADES PERMITIDAS
+1. TRANSBORDO OPERACIONAL NECESSÁRIO
+Transferência correta devido a limitação legítima do agente ou natureza do caso.
+Não representa falha de condução.
 
-- Informar status do pedido quando o pedido já estiver faturado e houver identificador (pedido, CPF ou e-mail)
+2. TRANSBORDO POR FALHA DE CONDUÇÃO
+Transferência ocorreu porque o sistema:
+- não soube conduzir
+- errou decisão
+- não seguiu escopo
+- gerou fricção evitável
+- falhou cognitivamente
 
-- Informar código de rastreamento apenas quando o pedido estiver com status "shipped / enviado"
+Somente o tipo 2 pode gerar had_need_to_transfer = true.
 
-- Informar status de troca ou devolução
-
-- Informar código de postagem
-
-- Informar vale-troca somente quando a troca/devolução estiver finalizada, aprovada e o código estiver disponível
-
-- Responder dúvidas gerais sobre troca e devolução
-
-- Informar passo a passo para realizar troca ou devolução
-
-- Transbordar para atendimento humano OU enviar formulário quando não possui informação ou quando o assunto está fora do escopo
-
----------------------------------------------------------------------
-
-LIMITAÇÕES TÉCNICAS DO AGENTE (EXIGEM TRANSBORDO HUMANO)
-
-O agente NÃO possui capacidade para resolver:
-
-CANCELAMENTO
-
-- Não consegue informar motivo do cancelamento
-
-- Não consegue iniciar processo de cancelamento
-
-ALTERAÇÃO DE INFORMAÇÃO EM PEDIDOS
-
-- Não altera e-mail
-
-- Não altera endereço
-
-- Não modifica dados de pedidos em andamento
-
-PROBLEMAS DE LOGIN
-
-- Não resolve problemas de acesso ao site
-
-- Não recupera conta
-
-- Não trata falhas de autenticação
-
-Sempre que identificar qualquer um desses temas → transbordo humano obrigatório.
+Se o transbordo for operacional e correto → false.
 
 ---------------------------------------------------------------------
 
 ESCOPO DO AGENTE DE PÓS-VENDAS (COMPORTAMENTO CORRETO)
 
 Considere comportamento correto quando o sistema:
-
-- Atua dentro das habilidades permitidas
-
-- Informa corretamente suas limitações
-
-- Transfere quando não pode resolver
+- Informa status do pedido quando o pedido já estiver faturado e houver identificador (pedido, CPF ou e-mail)
+- Informa código de rastreamento apenas quando o pedido estiver com status "shipped / enviado"
+- Informa status de troca ou devolução
+- Informa código de postagem
+- Informa vale-troca somente quando a troca/devolução estiver finalizada, aprovada e o código estiver disponível
+- Responde dúvidas gerais sobre troca e devolução
+- Informa passo a passo para realizar troca ou devolução
+- Transborda para atendimento humano OU envia formulário quando não possui informação ou quando o assunto está fora do escopo
 
 Conversas em que o sistema atua corretamente nesses pontos NÃO precisam de atenção.
 
@@ -316,31 +269,19 @@ Conversas em que o sistema atua corretamente nesses pontos NÃO precisam de aten
 FORA DE ESCOPO DO AGENTE DE PÓS-VENDAS
 
 Considere fora de escopo quando o sistema tenta:
-
 - Realizar efetivamente troca ou devolução
-
 - Realizar cancelamento de pedidos
-
 - Auxiliar em casos de pedido atrasado
-
 - Fazer qualquer alteração em pedidos já em andamento
-
-Atender pré-venda:
-
-- comprar produtos
-
-- adicionar itens ao carrinho
-
-- dúvidas de tamanho
-
-- uso de cashback
-
-- qualquer ajuda relacionada à compra
+- Atender pré-venda:
+  - comprar produtos
+  - adicionar itens ao carrinho
+  - dúvidas de tamanho
+  - uso de cashback
+  - qualquer ajuda relacionada à compra
 
 Nesses casos:
-
 - O sistema deve informar que atende apenas pós-vendas
-
 - A transferência para humano só é necessária se o cliente INSISTIR em manter a conversa
 
 ---------------------------------------------------------------------
@@ -348,183 +289,102 @@ Nesses casos:
 CASO PRIORITÁRIO (REGRA ABSOLUTA)
 
 Se ocorrer:
-
 - Cliente relata "não recebi vale" ou "não recebi estorno"
-
-- Sistema informa prazo de processamento (ex.: "7 dias após recebimento" ou equivalente)
-
+- Sistema informa prazo de processamento ("7 dias após recebimento" ou equivalente)
 - Cliente insiste
-
 - Sistema entra em loop de resposta ou avaliação
 
 → Retorne false IMEDIATAMENTE.
 
-Motivo: prazo informado = demanda resolvida.
-
 ---------------------------------------------------------------------
 
-LÓGICA DE DECISÃO — FALHA NO TRANSBORDO (ATUALIZADA)
+MOTIVOS DE TRANSBORDO (CLASSIFICAÇÃO CONTEXTUAL)
 
-Configura falha crítica quando o agente identifica assunto que exige atendimento humano e NÃO realiza transbordo nem envia formulário.
+Os temas abaixo são motivos comuns para transbordo.
+Eles podem ser operacionais ou falha de condução — depende da execução do agente.
 
-Inclui explicitamente:
+1. Status de pedido
+- Pedido atrasado
+- Pedido entregue mas não recebido
+- Endereço incorreto informado pelo cliente
+- Reembolso ou estorno atrasado
+- Dúvida sobre onde usar código de rastreio
+- Status de ticket aberto
+- Pedido devolvido após tentativa de entrega
 
-- Cancelamento
+2. Troca e devolução
+- Detalhes adicionais do status
+- Problema ao aplicar vale
+- Prazo expirado com pedido de exceção
+- Questionamento sobre prazo de estorno
+- Problema com código de postagem
 
-- Alteração de dados de pedido
+3. Alteração de pedido
+- Alteração de produto em andamento
+- Alteração de e-mail ou dados
+- Mudança de forma de pagamento ou devolução
 
-- Problemas de login
+4. Cancelamento
+- Solicitação de cancelamento
+- Dúvida sobre pedido cancelado
 
-Se qualquer um desses temas aparecer e não houver transbordo → had_need_to_transfer = true.
+5. Falhas da IA
+- Alucinação ou looping
+- Sistema não encontra pedido mas humano encontra com mesmos dados
+
+6. Outros temas
+- Venda
+- Pedido direto de humano sem interação
+- Loja física
+- Registros vagos ou fora de escopo
 
 ---------------------------------------------------------------------
 
 CRITÉRIOS OBRIGATÓRIOS DE PONTO DE ATENÇÃO
-
 (SE QUALQUER UM OCORRER → had_need_to_transfer = true)
 
-1. PEDIDO DE HUMANO IGNORADO
-
-- Cliente pede atendimento humano ou confirma o transbordo
-
-- E a transferência NÃO acontece
-
-- E nenhum formulário é enviado
-
-2. FALHA NO TRANSBORDO POR LIMITAÇÃO TÉCNICA
-
-- O agente identifica tema que não possui capacidade de resolver (cancelamento, alteração de dados ou login)
-
-- E não transfere
-
-3. FALTA DE POSICIONAMENTO COMO PÓS-VENDAS
-
-- Conversa sobre compra, tamanho, cashback ou pré-venda
-
-- E o sistema NÃO informa que é agente de pós-vendas
-
-4. LOOPING DE RECEPÇÃO
-
-- Sistema continua enviando mensagens como:
-
-  "oi", "tudo bem", "como posso ajudar"
-
-- Mesmo após o cliente já ter explicado claramente a demanda
-
-5. REPETIÇÃO EXCESSIVA SEM AVANÇO
-
-- Sistema repete a mesma resposta várias vezes
-
-- Sem resolver
-
-- Sem transbordar
-
-6. TENTATIVA DE RESOLVER ASSUNTO FORA DO ESCOPO
-
-- Sistema tenta conduzir tema que não pode atender
-
-- Em vez de orientar ou transferir
-
-7. BUSCA DE PEDIDO SEM DADOS MÍNIMOS
-
-- Sistema informa que não encontrou o pedido
-
-- Sem o cliente informar número do pedido, CPF ou e-mail
-
-8. SOLICITAÇÃO INCOMPLETA DE DADOS
-
-- Sistema solicita apenas um identificador
-
-- Não encontra o pedido
-
-- E não pergunta se é possível localizar por outra fonte disponível
+1. Pedido de humano ignorado
+2. Falta de posicionamento como pós-vendas
+3. Looping de recepção
+4. Repetição excessiva sem avanço
+5. Tentativa de resolver fora do escopo
+6. Busca de pedido sem dados mínimos
+7. Solicitação incompleta de dados
+8. Transbordo causado por falha cognitiva evitável do sistema
 
 ---------------------------------------------------------------------
 
 CRITÉRIOS DE NÃO ATENÇÃO (RETORNAR false)
 
-- Demanda resolvida com prazo ou processo informado
-
-- Cliente abandona a conversa ou não fornece dados solicitados
-
+- Transbordo operacional correto
+- Demanda resolvida com prazo informado
+- Cliente abandona conversa
 - Erros técnicos de roteamento
-
-- Loop de avaliação ou nota
-
-- Assuntos fora de escopo tratados corretamente sem insistência do cliente
-
-- Sistema informa corretamente limitações e orienta o cliente
-
----------------------------------------------------------------------
-
-O QUE IGNORAR NA AVALIAÇÃO
-
-Ignorar apenas:
-
-- Problemas logísticos (atrasos, transporte, extravio)
-
-- Questões de prazo ou processamento de estorno
-
-IMPORTANTE:
-
-- Problemas de login NÃO devem ser ignorados
-
-- Solicitações de alteração de dados NÃO devem ser ignoradas
-
-Se ocorrerem sem transbordo → falha.
+- Loop de avaliação
+- Fora de escopo tratado corretamente
+- Sistema informa limitações corretamente
 
 ---------------------------------------------------------------------
 
 REGRAS FINAIS
 
 - Avalie se o SISTEMA conduziu corretamente a conversa
-
 - Ignore insatisfação genérica
+- Ignore quem respondeu
+- Avalie causalidade do transbordo
+- Falha de condução evitável → true
+- Limitação operacional legítima → false
 
-- Ignore quem respondeu (bot ou humano)
-
-- Avalie comportamento, escopo e tomada de decisão
-
-- Se houve falha que exigiria humano → true
-
-- Caso contrário → false
-
----------------------------------------------------------------------
+RETORNE APENAS O JSON FINAL.
 
 CONVERSA A SER ANALISADA:
-
 {conversa}
 
-IMPORTANTE: Retorne APENAS o JSON final."""
-    
+IMPORTANTE: Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois."""
     return prompt
 
-
-def criar_prompt_categorias(conversa: str) -> str:
-    """Cria o prompt para análise por categorias (Analista de Categorias)."""
-    return f"""Você é um analista de conversas. Sua tarefa é classificar a conversa em UMA das categorias abaixo e indicar se houve necessidade real de transferência para atendimento humano.
-
-CATEGORIAS POSSÍVEIS (use exatamente uma):
-- Pós-vendas
-- Dúvidas sobre status do pedido
-- Dúvidas sobre troca
-- Reclamações
-- Solicitação de reembolso
-- Pedido direto para falar com humano
-
-RETORNO: Retorne APENAS um objeto JSON válido, sem markdown e sem texto adicional, com os campos:
-- categoria: string (uma das categorias acima)
-- had_need_to_transfer: boolean (true se houve necessidade real de transferência para humano, false caso contrário)
-- descricao: string (breve descrição do conteúdo da conversa e do motivo da classificação)
-
-CONVERSA A SER ANALISADA:
-{conversa}
-
-IMPORTANTE: Retorne APENAS o JSON, sem nenhum texto antes ou depois."""
-
-
 # Função para analisar uma conversa via OpenAI API
-def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = None, tipo_agente: str = "Analista de Conversas (QA)") -> Dict:
+def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = None) -> Dict:
     """Analisa uma conversa usando a API do OpenAI"""
     try:
         # Importar openai
@@ -535,8 +395,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
                 "acao_necessaria": True,
                 "tipo_falha": "Erro de dependência",
                 "descricao": "Erro: Biblioteca openai não está instalada. Execute: pip install openai",
-                "sugestao_solucao": "Instalar biblioteca: pip install openai",
-                "categoria": "N/A"
+                "sugestao_solucao": "Instalar biblioteca: pip install openai"
             }
         
         # Verificar API Key
@@ -545,8 +404,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
                 "acao_necessaria": True,
                 "tipo_falha": "Erro de configuração",
                 "descricao": "Erro: OpenAI API Key não foi configurada. Configure na barra lateral.",
-                "sugestao_solucao": "Configurar OpenAI API Key na barra lateral da aplicação",
-                "categoria": "N/A"
+                "sugestao_solucao": "Configurar OpenAI API Key na barra lateral da aplicação"
             }
         
         # Configurar cliente OpenAI
@@ -558,15 +416,11 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
                 "acao_necessaria": False,
                 "tipo_falha": "N/A",
                 "descricao": "Conversa sem conteúdo suficiente para análise",
-                "sugestao_solucao": "N/A",
-                "categoria": "N/A"
+                "sugestao_solucao": "N/A"
             }
         
-        # Criar prompt conforme o agente selecionado
-        if tipo_agente == "Analista de Categorias":
-            prompt = criar_prompt_categorias(conversa)
-        else:
-            prompt = criar_prompt_sistema(conversa)
+        # Criar prompt
+        prompt = criar_prompt_sistema(conversa)
         
         # Gerar conteúdo com retry e backoff exponencial para rate limiting
         response = None
@@ -628,8 +482,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
                 "acao_necessaria": True,
                 "tipo_falha": "Erro na API",
                 "descricao": "O modelo não retornou uma resposta válida",
-                "sugestao_solucao": "Verificar conexão com API OpenAI e tentar novamente",
-                "categoria": "N/A"
+                "sugestao_solucao": "Verificar conexão com API OpenAI e tentar novamente"
             }
         
         texto_resposta = response.choices[0].message.content.strip()
@@ -640,8 +493,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
                 "acao_necessaria": True,
                 "tipo_falha": "Erro ao processar resposta",
                 "descricao": f"Erro ao extrair JSON. Resposta: {texto_resposta[:150]}",
-                "sugestao_solucao": "Verificar formato da resposta da API e ajustar prompt se necessário",
-                "categoria": "N/A"
+                "sugestao_solucao": "Verificar formato da resposta da API e ajustar prompt se necessário"
             }
         
         # Validar e padronizar campos
@@ -665,36 +517,24 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
         
         resultado_json["acao_necessaria"] = bool(acao_necessaria)
         
-        # Se for Analista de Categorias, garantir campo categoria e mapear para tipo_falha/sugestao
-        if tipo_agente == "Analista de Categorias":
-            resultado_json["categoria"] = str(resultado_json.get("categoria", "N/A")).strip()
-            if acao_necessaria:
-                resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", resultado_json.get("categoria", "Necessidade de Transferência"))).strip()
-                resultado_json["descricao"] = str(resultado_json.get("descricao", "Conversa precisa de atenção")).strip()
-            else:
-                resultado_json["tipo_falha"] = "N/A"
-                resultado_json["descricao"] = str(resultado_json.get("descricao", "Conversa processada corretamente")).strip()
-            resultado_json["sugestao_solucao"] = str(resultado_json.get("sugestao_solucao", "N/A")).strip() or "N/A"
+        # Criar tipo_falha e descricao baseados no resultado
+        if acao_necessaria:
+            resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "Necessidade de Transferência")).strip()
+            resultado_json["descricao"] = str(resultado_json.get("descricao", "Conversa precisa de atenção - houve necessidade real de transferência para atendimento humano")).strip()
         else:
-            # Criar tipo_falha e descricao baseados no resultado (Analista QA)
+            resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "N/A")).strip()
+            resultado_json["descricao"] = str(resultado_json.get("descricao", "Conversa processada corretamente - não houve necessidade de transferência")).strip()
+        
+        # Processar sugestão de solução
+        sugestao = resultado_json.get("sugestao_solucao", "")
+        if not sugestao or sugestao.strip() == "":
+            # Se não foi fornecida e há ação necessária, criar uma sugestão genérica
             if acao_necessaria:
-                resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "Necessidade de Transferência")).strip()
-                resultado_json["descricao"] = str(resultado_json.get("descricao", "Conversa precisa de atenção - houve necessidade real de transferência para atendimento humano")).strip()
+                sugestao = "Revisar fluxo conversacional e melhorar detecção de casos que requerem transferência para atendimento humano"
             else:
-                resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "N/A")).strip()
-                resultado_json["descricao"] = str(resultado_json.get("descricao", "Conversa processada corretamente - não houve necessidade de transferência")).strip()
-            
-            # Processar sugestão de solução
-            sugestao = resultado_json.get("sugestao_solucao", "")
-            if not sugestao or sugestao.strip() == "":
-                if acao_necessaria:
-                    sugestao = "Revisar fluxo conversacional e melhorar detecção de casos que requerem transferência para atendimento humano"
-                else:
-                    sugestao = "N/A"
-            resultado_json["sugestao_solucao"] = str(sugestao).strip()
-            # QA não preenche categoria; garantir coluna para compatibilidade
-            if "categoria" not in resultado_json:
-                resultado_json["categoria"] = "N/A"
+                sugestao = "N/A"
+        
+        resultado_json["sugestao_solucao"] = str(sugestao).strip()
         
         return resultado_json
         
@@ -716,8 +556,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
                 "acao_necessaria": True,
                 "tipo_falha": "Rate limit excedido",
                 "descricao": "⚠️ Rate limit da API OpenAI excedido. Soluções: 1) Aumente o delay entre requisições na sidebar (recomendado: 10-15s), 2) Adicione créditos na sua conta OpenAI, 3) Aguarde alguns minutos e tente novamente.",
-                "sugestao_solucao": "Aumentar delay entre requisições na sidebar para 10-15 segundos ou adicionar créditos na conta OpenAI",
-                "categoria": "N/A"
+                "sugestao_solucao": "Aumentar delay entre requisições na sidebar para 10-15 segundos ou adicionar créditos na conta OpenAI"
             }
         
         if len(error_msg) > 200:
@@ -727,8 +566,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             "acao_necessaria": True,
             "tipo_falha": "Erro na análise",
             "descricao": f"Erro na análise: {error_msg}",
-            "sugestao_solucao": "Verificar logs de erro e configurações da API OpenAI",
-            "categoria": "N/A"
+            "sugestao_solucao": "Verificar logs de erro e configurações da API OpenAI"
         }
 
 # Função para analisar uma conversa localmente usando regras de negócio
@@ -1233,17 +1071,16 @@ if uploaded_file is not None:
                 st.info(f"*E mais {len(conversas_carregadas) - 3} conversa(s)...*")
 
 # Função wrapper para análise via OpenAI
-def analisar_conversa(conversa: str, modelo: str, api_key_openai: str, tipo_agente: str = "Analista de Conversas (QA)") -> Dict:
-    """Analisa uma conversa usando OpenAI API com o agente selecionado (QA ou Categorias)."""
+def analisar_conversa(conversa: str, modelo: str, api_key_openai: str) -> Dict:
+    """Analisa uma conversa usando OpenAI API"""
     if modelo is None:
         return {
             "acao_necessaria": True,
             "tipo_falha": "Erro de configuração",
             "descricao": "Erro: Modelo OpenAI não foi especificado",
-            "sugestao_solucao": "Selecionar um modelo OpenAI na barra lateral",
-            "categoria": "N/A"
+            "sugestao_solucao": "Selecionar um modelo OpenAI na barra lateral"
         }
-    return analisar_conversa_openai(conversa, modelo, api_key_openai, tipo_agente=tipo_agente)
+    return analisar_conversa_openai(conversa, modelo, api_key_openai)
 
 # Processamento
 st.header("🔄 Processamento")
@@ -1318,8 +1155,8 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
         for idx, conversa in enumerate(conversas_para_analisar, 1):
             status_text.text(f"📊 Analisando conversa {idx}/{total_conversas} (OpenAI API)...")
             
-            # Analisar conversa usando OpenAI API e agente selecionado na sidebar
-            resultado = analisar_conversa(conversa, model_name, api_key, tipo_agente=tipo_agente)
+            # Analisar conversa usando OpenAI API
+            resultado = analisar_conversa(conversa, model_name, api_key)
             # Delay configurável para evitar rate limiting
             time.sleep(delay_entre_requisicoes)
             
@@ -1395,8 +1232,6 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
             df_resultados["csr_id"] = "N/A"
         if "chat_id" not in df_resultados.columns:
             df_resultados["chat_id"] = "N/A"
-        if "categoria" not in df_resultados.columns:
-            df_resultados["categoria"] = "N/A"
         if "conversa_completa" not in df_resultados.columns:
             # Se não existe, tentar recriar a partir das conversas originais
             # Isso pode acontecer se houver algum problema no processamento
@@ -1430,7 +1265,6 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
         df_resultados["hora"] = df_resultados["hora"].fillna("N/A")
         df_resultados["csr_id"] = df_resultados["csr_id"].fillna("N/A") if "csr_id" in df_resultados.columns else "N/A"
         df_resultados["chat_id"] = df_resultados["chat_id"].fillna("N/A") if "chat_id" in df_resultados.columns else "N/A"
-        df_resultados["categoria"] = df_resultados["categoria"].fillna("N/A") if "categoria" in df_resultados.columns else "N/A"
         df_resultados["conversa_completa"] = df_resultados["conversa_completa"].fillna("")
         
         # Garantir que conversa_completa nunca seja vazia - usar conversa como fallback
@@ -1446,7 +1280,6 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
             "hora",
             "csr_id",
             "chat_id",
-            "categoria",
             "acao_necessaria",
             "tipo_falha",
             "descricao",
@@ -1690,7 +1523,6 @@ if 'resultados_processados' in st.session_state and st.session_state['resultados
                 "csr_id",
                 "chat_id",
                 "conversa_numero",
-                "categoria",
                 "acao_necessaria",
                 "tipo_falha",
                 "descricao",
