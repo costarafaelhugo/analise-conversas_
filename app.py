@@ -10,10 +10,10 @@ from datetime import datetime
 
 # Versionamento semântico (MAJOR.MINOR.PATCH):
 # MAJOR = mudança grande no modelo de análise ou comportamento (ex.: novo prompt de transbordo)
-# MINOR = nova funcionalidade compatível (ex.: modo Analista de Categorias, novas colunas)
+# MINOR = nova funcionalidade compatível (ex.: modo Analista de Categorias, novas colunas, nova taxonomia de motivos)
 # PATCH = correções, ajustes de UI, documentação, scripts
-# Histórico: 1.0 inicial → 1.x critérios/colunas/categorias → 2.0 prompt produção (transbordo)
-APP_VERSION = "2.0.3"
+# Histórico: 1.0 inicial → 1.x critérios/colunas/categorias → 2.0 prompt produção (transbordo) → 2.1 prompt com taxonomia causal de motivo_transbordo
+APP_VERSION = "2.1.0"
 
 
 # Configuração da página
@@ -220,180 +220,190 @@ def extract_json_from_text(text: str) -> Dict:
 def criar_prompt_sistema(conversa: str) -> str:
     """Cria o prompt estruturado para análise da conversa via OpenAI"""
     prompt = f"""TAREFA:
-Analisar a conversa entre CLIENTE e o sistema (WHIZZ + ATENDENTE BOT, avaliados como um único agente) e determinar se a conversa PRECISA DE ATENÇÃO por TER HAVIDO NECESSIDADE REAL de transferência para atendimento humano.
+Analisar a conversa entre CLIENTE e o sistema (WHIZZ + ATENDENTE BOT, avaliados como um único agente) e determinar:
+
+1. Se houve NECESSIDADE REAL de transferência para atendimento humano
+2. Qual foi o MOTIVO DO TRANSBORDO — mas SOMENTE se o transbordo foi efetivamente realizado
 
 IMPORTANTE:
 Este é um AGENTE DE ANÁLISE DE CONVERSAS.
 Não é um agente de pós-vendas nem um agente operacional.
 Avalie apenas o comportamento do sistema, sua aderência ao escopo e sua capacidade de conduzir corretamente a conversa.
 
-RETORNO (JSON EXATO – sem texto adicional):
+---------------------------------------------------------------------
+
+RETORNO (JSON EXATO – sem texto adicional)
+
+Se NÃO houve transbordo efetivado:
 {{
-  "had_need_to_transfer": true
+  "had_need_to_transfer": true ou false,
+  "motivo_transbordo": null
 }}
-OU
+
+Se houve transbordo efetivado:
 {{
-  "had_need_to_transfer": false
+  "had_need_to_transfer": true ou false,
+  "motivo_transbordo": "categoria_padronizada"
 }}
+
+Nunca inventar motivo se não houve transbordo real.
+Nunca inferir intenção.
+Avaliar apenas eventos que ocorreram.
+
+---------------------------------------------------------------------
+
+REGRA CRÍTICA — DIFERENCIAÇÃO OBRIGATÓRIA
+
+NÃO CONFUNDIR:
+
+✔ necessidade de transbordo  
+✔ transbordo efetivamente realizado  
+
+O campo motivo_transbordo deve refletir SOMENTE:
+→ transbordos que realmente aconteceram na conversa
+
+Se o cliente pediu humano mas não foi transferido → motivo_transbordo = null
+
+---------------------------------------------------------------------
+
+PROCESSO OBRIGATÓRIO DE RACIOCÍNIO (NÃO EXIBIR)
+
+PASSO 1 — verificar se houve transbordo real  
+PASSO 2 — se houve, classificar o motivo  
+PASSO 3 — avaliar se o transbordo foi causado por falha do sistema  
+PASSO 4 — definir had_need_to_transfer  
+
+---------------------------------------------------------------------
+
+CLASSIFICAÇÃO CAUSAL DO TRANSBORDO
+
+1. TRANSBORDO OPERACIONAL NECESSÁRIO
+Limitação legítima do agente ou natureza do caso.
+Não representa falha.
+
+2. TRANSBORDO POR FALHA DE CONDUÇÃO
+Erro cognitivo, decisão incorreta ou fricção evitável.
+
+Somente o tipo 2 pode gerar had_need_to_transfer = true.
+
+---------------------------------------------------------------------
+
+TAXONOMIA OFICIAL — MOTIVO_TRANSBORDO
+
+Usar EXATAMENTE um dos valores abaixo quando houver transbordo:
+
+STATUS_PEDIDO_ATRASADO  
+STATUS_PEDIDO_ENTREGUE_NAO_RECEBIDO  
+ENDERECO_INCORRETO  
+REEMBOLSO_OU_ESTORNO_ATRASADO  
+DUVIDA_USO_CODIGO_RASTREIO  
+STATUS_TICKET  
+PEDIDO_DEVOLVIDO_LOGISTICA  
+
+DETALHES_STATUS_TROCA_DEVOLUCAO  
+PROBLEMA_VALE_TROCA  
+EXCECAO_PRAZO_EXPIRADO  
+PRAZO_ESTORNO  
+PROBLEMA_CODIGO_POSTAGEM  
+
+ALTERACAO_PEDIDO_EM_ANDAMENTO  
+ALTERACAO_DADOS_CADASTRAIS  
+ALTERACAO_FORMA_PAGAMENTO_OU_DEVOLUCAO  
+
+SOLICITACAO_CANCELAMENTO  
+DUVIDA_PEDIDO_CANCELADO  
+
+FALHA_IA_LOOP_OU_ALUCINACAO  
+PEDIDO_NAO_LOCALIZADO_PELA_IA  
+
+DUVIDA_PRE_VENDA  
+LOJA_FISICA  
+PEDIDO_DIRETO_HUMANO  
+ASSUNTO_FORA_DO_ESCOPO  
+OUTROS
+
+Se nenhum motivo for identificável → OUTROS
 
 ---------------------------------------------------------------------
 
 ESCOPO DO AGENTE DE PÓS-VENDAS (COMPORTAMENTO CORRETO)
 
 Considere comportamento correto quando o sistema:
-- Informa status do pedido quando o pedido já estiver faturado e houver identificador (pedido, CPF ou e-mail)
-- Informa código de rastreamento apenas quando o pedido estiver com status "shipped / enviado"
+- Informa status do pedido com identificador válido
+- Informa rastreio apenas quando enviado
 - Informa status de troca ou devolução
 - Informa código de postagem
-- Informa vale-troca somente quando a troca/devolução estiver finalizada, aprovada e o código estiver disponível
-- Responde dúvidas gerais sobre troca e devolução
-- Informa passo a passo para realizar troca ou devolução
-- Transborda para atendimento humano OU envia formulário quando não possui informação ou quando o assunto está fora do escopo
-
-Conversas em que o sistema atua corretamente nesses pontos NÃO precisam de atenção.
+- Informa vale-troca apenas quando disponível
+- Orienta processos de troca ou devolução
+- Transborda corretamente quando necessário
 
 ---------------------------------------------------------------------
 
-FORA DE ESCOPO DO AGENTE DE PÓS-VENDAS
+FORA DE ESCOPO DO AGENTE
 
-Considere fora de escopo quando o sistema tenta:
-- Realizar efetivamente troca ou devolução
-- Realizar cancelamento de pedidos
-- Auxiliar em casos de pedido atrasado
-- Fazer qualquer alteração em pedidos já em andamento
-- Atender pré-venda:
-  - comprar produtos
-  - adicionar itens ao carrinho
-  - dúvidas de tamanho
-  - uso de cashback
-  - qualquer ajuda relacionada à compra
+- Cancelamentos
+- Alterações de pedido
+- Pedido atrasado (resolução ativa)
+- Pré-venda
+- Alterações cadastrais operacionais
 
-Nesses casos:
-- O sistema deve informar que atende apenas pós-vendas
-- A transferência para humano só é necessária se o cliente INSISTIR em manter a conversa
+Sistema deve se posicionar como pós-vendas.
 
 ---------------------------------------------------------------------
 
 CASO PRIORITÁRIO (REGRA ABSOLUTA)
 
-Se ocorrer:
-- Cliente relata "não recebi vale" ou "não recebi estorno"
-- Sistema informa prazo de processamento ("7 dias após recebimento" ou equivalente)
-- Cliente insiste
-- Sistema entra em loop de resposta ou avaliação
+Se:
+cliente não recebeu vale/estorno  
+sistema informa prazo  
+cliente insiste  
+sistema entra em loop  
 
-→ Retorne false IMEDIATAMENTE.
-Motivo: prazo informado = demanda resolvida.
-
----------------------------------------------------------------------
-
-MOTIVOS DE TRANSBORDO (CLASSIFICAÇÃO CONTEXTUAL)
-
-Os temas abaixo são motivos comuns para transbordo.  
-IMPORTANTE: a existência de transbordo nesses casos NÃO significa falha do sistema.  
-Só é ponto de atenção se o agente conduziu incorretamente ou falhou na tomada de decisão.
-
-1. Status de pedido
-- Pedido atrasado ou atraso na entrega
-- Pedido consta como entregue, mas não foi recebido
-- Endereço informado errado pelo cliente
-- Reembolso ou estorno atrasado (cliente quer previsão)
-- Dúvida sobre onde usar código de rastreio
-- Status de ticket ou formulário já aberto
-- Pedido devolvido após tentativa de entrega
-
-2. Troca e devolução
-- Cliente quer mais detalhes do status da troca ou devolução
-- Problemas ao aplicar vale-troca ou vale-compra
-- Prazo expirado e solicitação de exceção
-- Questionamento sobre prazo de estorno ou reembolso
-- Problema ou solicitação de novo código de postagem
-
-3. Alteração de pedido
-- Alteração de produto em pedido em andamento
-- Alteração de e-mail ou dados cadastrais
-- Mudança na forma de pagamento ou tipo de devolução
-
-4. Cancelamento
-- Solicitação de cancelamento
-- Dúvidas sobre pedido cancelado
-
-5. Falhas da IA
-- Alucinação ou looping operacional
-- Sistema não identifica pedido, mas humano consegue com os mesmos dados
-
-6. Outros temas
-- Dúvidas de venda (estoque, tamanho, defeitos, cupons)
-- Pedido direto de atendimento humano sem interação mínima
-- Loja física (retirada, trocas, estoque)
-- Registros sem descrição clara ou fora do escopo
+→ had_need_to_transfer = false
 
 ---------------------------------------------------------------------
 
 CRITÉRIOS OBRIGATÓRIOS DE PONTO DE ATENÇÃO
-(SE QUALQUER UM OCORRER → had_need_to_transfer = true)
 
-1. PEDIDO DE HUMANO IGNORADO
-- Cliente pede atendimento humano ou confirma o transbordo
-- E a transferência NÃO acontece
-- E nenhum formulário é enviado
-
-2. FALTA DE POSICIONAMENTO COMO PÓS-VENDAS
-- Conversa sobre compra, tamanho, cashback ou pré-venda
-- E o sistema NÃO informa que é um agente de pós-vendas
-
-3. LOOPING DE RECEPÇÃO
-- Sistema continua enviando mensagens como:
-  "oi", "tudo bem", "como posso ajudar"
-- Mesmo após o cliente já ter explicado claramente a demanda
-
-4. REPETIÇÃO EXCESSIVA SEM AVANÇO
-- Sistema repete a mesma frase ou resposta várias vezes
-- Sem resolver a demanda
-- E sem transbordar ou enviar formulário
-
-5. TENTATIVA DE RESOLVER ASSUNTO FORA DO ESCOPO
-- Sistema tenta conduzir ou resolver temas que não pode atender
-- Em vez de orientar corretamente ou transbordar
-
-6. BUSCA DE PEDIDO SEM DADOS MÍNIMOS
-- Sistema informa que não encontrou o pedido
-- Sem o cliente ter informado número do pedido, CPF ou e-mail
-
-7. SOLICITAÇÃO INCOMPLETA DE DADOS
-- Sistema solicita apenas um identificador
-- Não encontra o pedido
-- E NÃO pergunta se é possível localizar por outra fonte disponível
+1. Pedido de humano ignorado  
+2. Falta de posicionamento como pós-vendas  
+3. Loop de recepção  
+4. Repetição sem avanço  
+5. Tentativa de resolver fora do escopo  
+6. Busca sem dados mínimos  
+7. Solicitação incompleta de dados  
+8. Transbordo causado por falha evitável  
 
 ---------------------------------------------------------------------
 
-CRITÉRIOS DE NÃO ATENÇÃO (RETORNAR false)
+CRITÉRIOS DE NÃO ATENÇÃO
 
-- Demanda resolvida com prazo ou processo informado
-- Cliente abandona a conversa ou não fornece dados solicitados
-- Erros técnicos de roteamento
-- Loop de avaliação ou nota
-- Assuntos fora de escopo tratados corretamente sem insistência do cliente
-- Sistema informa corretamente limitações e orienta o cliente
-- Transbordo realizado corretamente para temas legítimos
+- Transbordo operacional correto
+- Prazo informado corretamente
+- Cliente abandona conversa
+- Fora de escopo tratado corretamente
+- Limitações informadas corretamente
 
 ---------------------------------------------------------------------
 
 REGRAS FINAIS
 
-- Avalie se o SISTEMA conduziu corretamente a conversa
-- Ignore insatisfação genérica
-- Ignore quem respondeu (bot ou humano)
-- Avalie comportamento, escopo e tomada de decisão
-- Se houve falha de condução que exigiria humano → true
-- Caso contrário → false
+- Avaliar causalidade do transbordo
+- Avaliar apenas eventos reais
+- Se não houve transbordo → motivo_transbordo = null
+- Falha evitável → true
+- Limitação legítima → false
 
-RETORNE APENAS O JSON FINAL.
+---------------------------------------------------------------------
 
 CONVERSA A SER ANALISADA:
 {conversa}
 
-IMPORTANTE: Retorne APENAS o JSON, sem nenhum texto adicional antes ou depois."""
+IMPORTANTE:
+Retorne APENAS o JSON final.
+Sem explicações.
+Sem texto adicional.
+Sem comentários."""
     return prompt
 
 # Função para analisar uma conversa via OpenAI API
