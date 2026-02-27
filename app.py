@@ -4,32 +4,16 @@ import re
 import json
 import time
 import csv
-import os
-import subprocess
 from io import StringIO, BytesIO
 from typing import List, Dict
 from datetime import datetime
 
-# Versão do app (atualizar ao fazer deploy; baseado no último commit)
-APP_VERSION = "52a162f"
-
-
-def _get_version() -> str:
-    """Obtém a versão exibida: tenta git rev-parse, senão usa APP_VERSION."""
-    try:
-        base = os.path.dirname(os.path.abspath(__file__))
-        r = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-            cwd=base,
-        )
-        if r.returncode == 0 and r.stdout and r.stdout.strip():
-            return r.stdout.strip()
-    except Exception:
-        pass
-    return APP_VERSION
+# Versionamento semântico (MAJOR.MINOR.PATCH):
+# MAJOR = mudança grande no modelo de análise ou comportamento (ex.: novo prompt de transbordo)
+# MINOR = nova funcionalidade compatível (ex.: modo Analista de Categorias, novas colunas)
+# PATCH = correções, ajustes de UI, documentação, scripts
+# Histórico: 1.0 inicial → 1.x critérios/colunas/categorias → 2.0 prompt produção (transbordo)
+APP_VERSION = "2.0.3"
 
 
 # Configuração da página
@@ -125,12 +109,12 @@ st.markdown(
 
 # Título da aplicação
 st.title("🤖 Analista de Conversas - QA Chatbot")
-st.caption(f"Versão **{_get_version()}**")
+st.caption(f"Versão **{APP_VERSION}**")
 st.markdown("---")
 
 # Sidebar - Configurações
 st.sidebar.header("⚙️ Configurações")
-st.sidebar.caption(f"Versão **{_get_version()}**")
+st.sidebar.caption(f"Versão **{APP_VERSION}**")
 
 # Configurações para OpenAI API (obrigatório)
 st.sidebar.markdown("---")
