@@ -228,13 +228,20 @@ Não é um agente de pós-vendas nem um agente operacional.
 Avalie apenas o comportamento do sistema, sua aderência ao escopo e sua capacidade de conduzir corretamente a conversa.
 
 RETORNO (JSON EXATO – sem texto adicional):
+
+Se had_need_to_transfer = true:
 {{
-  "had_need_to_transfer": true
+  "had_need_to_transfer": true,
+  "motivo_transbordo": "Breve motivo (ex.: Pedido de humano ignorado; Looping de recepção; Status de pedido - Reembolso atrasado; Falhas da IA - looping)"
 }}
-OU
+
+Se had_need_to_transfer = false:
 {{
-  "had_need_to_transfer": false
+  "had_need_to_transfer": false,
+  "motivo_transbordo": "N/A"
 }}
+
+Sempre inclua o campo motivo_transbordo. Use um dos MOTIVOS DE TRANSBORDO ou dos CRITÉRIOS DE PONTO DE ATENÇÃO quando for true; use "N/A" quando for false.
 
 ---------------------------------------------------------------------
 
@@ -404,6 +411,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Erro de dependência",
+                "motivo_transbordo": "N/A",
                 "descricao": "Erro: Biblioteca openai não está instalada. Execute: pip install openai",
                 "sugestao_solucao": "Instalar biblioteca: pip install openai"
             }
@@ -413,6 +421,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Erro de configuração",
+                "motivo_transbordo": "N/A",
                 "descricao": "Erro: OpenAI API Key não foi configurada. Configure na barra lateral.",
                 "sugestao_solucao": "Configurar OpenAI API Key na barra lateral da aplicação"
             }
@@ -425,6 +434,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": False,
                 "tipo_falha": "N/A",
+                "motivo_transbordo": "N/A",
                 "descricao": "Conversa sem conteúdo suficiente para análise",
                 "sugestao_solucao": "N/A"
             }
@@ -491,6 +501,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Erro na API",
+                "motivo_transbordo": "N/A",
                 "descricao": "O modelo não retornou uma resposta válida",
                 "sugestao_solucao": "Verificar conexão com API OpenAI e tentar novamente"
             }
@@ -502,6 +513,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Erro ao processar resposta",
+                "motivo_transbordo": "N/A",
                 "descricao": f"Erro ao extrair JSON. Resposta: {texto_resposta[:150]}",
                 "sugestao_solucao": "Verificar formato da resposta da API e ajustar prompt se necessário"
             }
@@ -535,6 +547,9 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             resultado_json["tipo_falha"] = str(resultado_json.get("tipo_falha", "N/A")).strip()
             resultado_json["descricao"] = str(resultado_json.get("descricao", "Conversa processada corretamente - não houve necessidade de transferência")).strip()
         
+        # Motivo do transbordo (sempre preencher)
+        resultado_json["motivo_transbordo"] = str(resultado_json.get("motivo_transbordo", "N/A")).strip() or "N/A"
+        
         # Processar sugestão de solução
         sugestao = resultado_json.get("sugestao_solucao", "")
         if not sugestao or sugestao.strip() == "":
@@ -565,6 +580,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
             return {
                 "acao_necessaria": True,
                 "tipo_falha": "Rate limit excedido",
+                "motivo_transbordo": "N/A",
                 "descricao": "⚠️ Rate limit da API OpenAI excedido. Soluções: 1) Aumente o delay entre requisições na sidebar (recomendado: 10-15s), 2) Adicione créditos na sua conta OpenAI, 3) Aguarde alguns minutos e tente novamente.",
                 "sugestao_solucao": "Aumentar delay entre requisições na sidebar para 10-15 segundos ou adicionar créditos na conta OpenAI"
             }
@@ -575,6 +591,7 @@ def analisar_conversa_openai(conversa: str, modelo: str, api_key_openai: str = N
         return {
             "acao_necessaria": True,
             "tipo_falha": "Erro na análise",
+            "motivo_transbordo": "N/A",
             "descricao": f"Erro na análise: {error_msg}",
             "sugestao_solucao": "Verificar logs de erro e configurações da API OpenAI"
         }
@@ -1087,6 +1104,7 @@ def analisar_conversa(conversa: str, modelo: str, api_key_openai: str) -> Dict:
         return {
             "acao_necessaria": True,
             "tipo_falha": "Erro de configuração",
+            "motivo_transbordo": "N/A",
             "descricao": "Erro: Modelo OpenAI não foi especificado",
             "sugestao_solucao": "Selecionar um modelo OpenAI na barra lateral"
         }
@@ -1246,6 +1264,8 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
             # Se não existe, tentar recriar a partir das conversas originais
             # Isso pode acontecer se houver algum problema no processamento
             df_resultados["conversa_completa"] = ""
+        if "motivo_transbordo" not in df_resultados.columns:
+            df_resultados["motivo_transbordo"] = "N/A"
         
         # Garantir que conversa_completa não seja uma versão resumida
         # Se conversa_completa está vazia ou é igual à conversa resumida, tentar recuperar da lista original
@@ -1275,6 +1295,7 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
         df_resultados["hora"] = df_resultados["hora"].fillna("N/A")
         df_resultados["csr_id"] = df_resultados["csr_id"].fillna("N/A") if "csr_id" in df_resultados.columns else "N/A"
         df_resultados["chat_id"] = df_resultados["chat_id"].fillna("N/A") if "chat_id" in df_resultados.columns else "N/A"
+        df_resultados["motivo_transbordo"] = df_resultados["motivo_transbordo"].fillna("N/A") if "motivo_transbordo" in df_resultados.columns else "N/A"
         df_resultados["conversa_completa"] = df_resultados["conversa_completa"].fillna("")
         
         # Garantir que conversa_completa nunca seja vazia - usar conversa como fallback
@@ -1292,6 +1313,7 @@ if conversas_carregadas and st.button("🚀 Iniciar Análise", type="primary", u
             "chat_id",
             "acao_necessaria",
             "tipo_falha",
+            "motivo_transbordo",
             "descricao",
             "sugestao_solucao",
             "conversa"
@@ -1535,6 +1557,7 @@ if 'resultados_processados' in st.session_state and st.session_state['resultados
                 "conversa_numero",
                 "acao_necessaria",
                 "tipo_falha",
+                "motivo_transbordo",
                 "descricao",
                 "sugestao_solucao",
                 "conversa"
